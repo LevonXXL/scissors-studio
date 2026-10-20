@@ -1,5 +1,7 @@
 from django.db import models
 
+from filer.fields.image import FilerImageField
+
 from salons.models import Salon
 
 
@@ -88,3 +90,41 @@ class Review(models.Model):
 
     def __str__(self):
         return f'{self.author or "Аноним"} — {self.review_date:%d.%m.%Y} ({self.get_source_display()})'
+
+
+class ReviewImage(models.Model):
+    """Локальная копия фотографии отзыва из Rewio."""
+
+    review = models.ForeignKey(
+        Review,
+        verbose_name='Отзыв',
+        related_name='local_images',
+        on_delete=models.CASCADE,
+    )
+    image = FilerImageField(
+        verbose_name='Изображение',
+        on_delete=models.CASCADE,
+        related_name='+',
+    )
+    source_url = models.URLField(
+        'Исходный URL',
+        max_length=2000,
+    )
+    position = models.PositiveSmallIntegerField(
+        'Порядок',
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = 'Фото отзыва'
+        verbose_name_plural = 'Фото отзывов'
+        ordering = ('position', 'id')
+        constraints = [
+            models.UniqueConstraint(
+                fields=('review', 'source_url'),
+                name='unique_review_image_source',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Фото отзыва #{self.review_id}, позиция {self.position}'

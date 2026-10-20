@@ -20,10 +20,27 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     def get_images(self, obj):
         request = self.context.get('request')
+
+        local_images = list(obj.local_images.select_related('image').all())
+
+        if local_images:
+            return [
+                {
+                    'preview': _public_image_url(item.image.url, request),
+                    'image': _public_image_url(item.image.url, request),
+                }
+                for item in local_images
+                if item.image
+            ]
+
         return [
-            {key: _public_image_url(image.get(key, ''), request) for key in ('preview', 'image')}
+            {
+                key: _public_image_url(image.get(key, ''), request)
+                for key in ('preview', 'image')
+            }
             for image in (obj.images or [])
-            if isinstance(image, dict) and (image.get('image') or image.get('preview'))
+            if isinstance(image, dict)
+               and (image.get('image') or image.get('preview'))
         ]
 
     class Meta:
@@ -61,11 +78,21 @@ class HomeReviewSerializer(serializers.ModelSerializer):
         return 'text'
 
     def get_workImage(self, obj) -> str:
-        """Первое фото из массива, prefer 'image' (full), fallback 'preview'."""
-        images = obj.images or []
-        for image in images:
+        request = self.context.get('request')
+
+        local_image = (
+            obj.local_images
+            .select_related('image')
+            .first()
+        )
+
+        if local_image and local_image.image:
+            return _public_image_url(local_image.image.url, request)
+
+        for image in obj.images or []:
             if isinstance(image, dict):
                 url = image.get('image') or image.get('preview') or ''
                 if url:
-                    return _public_image_url(url, self.context.get('request'))
+                    return _public_image_url(url, request)
+
         return ''
