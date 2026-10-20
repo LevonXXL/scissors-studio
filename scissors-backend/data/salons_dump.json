@@ -1,0 +1,38 @@
+[
+{
+  "model": "salons.salon",
+  "pk": 1,
+  "fields": {
+    "name": "Scissors Зеленоград 17/мкр",
+    "address": "Георгиевский просп., 33а корпус 2",
+    "latitude": "55.963644",
+    "longitude": "37.154522",
+    "phone": "+7 926 729-79-89",
+    "working_hours": "Ежедневно: 10:00 - 21:00",
+    "description": "<p style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Scissors - это пространство красоты, в котором собраны самостоятельные профессионалы бьюти индустрии. Салон предоставляет высокий сервис, а мастера оказывают услуги выского профессионального уровня.&nbsp;</span></p>\n<p style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Пространство полного цикла услуг:</span></p>\n<ul>\n<li style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Парикмахерский зал;</span></li>\n<li style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Lash &amp; brow bar;</span></li>\n<li style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Эстетическая косметология;</span></li>\n<li style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">Уютный кабинет ногтевого сервиса.</span></li>\n</ul>\n<p style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">&nbsp;Мастера регулярно проходят обучение и повышение квалификации, что подтверждено многочисленными сертификатами. Работаем только на профессиональной косметики и аксессуарах: Lisap Milano, Comfort Zone, Goldwell, Framar и другие.</span></p>\n<p style=\"text-align: left; margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background: transparent; font-stretch: normal; line-height: 1.4em;\"><span style=\"font-family: &#039;Open Sans&#039;, sans-serif; font-size: 14px;\">Подробнее можно ознакомиться с ценами на услуги и акциями на официальном</span><span style=\"background-color: transparent; font-size: 14px;\">&nbsp;</span><a href=\"http://studio.scissors.group\" target=\"_blank\">сайте</a><span style=\"background-color: transparent; font-size: 14px;\"> нашего салона.</span></p>\n<p style=\"margin-bottom: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: baseline; background-image: initial; background-position: initial; background-size: initial; background-repeat: initial; background-attachment: initial; background-origin: initial; background-clip: initial; font-stretch: normal; line-height: 1.4em;\"><span style=\"background-color: transparent; font-size: 14px;\">До встречи в</span><span style=\"background-color: transparent; font-size: 14px;\">&nbsp;</span><span style=\"outline-color: initial; outline-style: initial; touch-action: manipulation; -webkit-tap-highlight-color: transparent; display: inline-block; line-height: 20px; word-break: break-word;\">Scissors Studio.</span></p>",
+    "logo": 1,
+    "is_active": true,
+    "position": 0,
+    "yclients_company_id": "38297",
+    "last_synced_at": "2026-08-25T17:36:31.807Z"
+  }
+},
+{
+  "model": "salons.salon",
+  "pk": 2,
+  "fields": {
+    "name": "Scissors Красные Ворота",
+    "address": "Большой козловский переулок, 11/4",
+    "latitude": "55.766135",
+    "longitude": "37.648069",
+    "phone": "+7 926 071-71-63",
+    "working_hours": "Ежедневно: 10:00 - 22:00",
+    "description": "Scissors - это пространство красоты, в котором собраны самостоятельные профессионалы бьюти индустрии. \nНаш особняк находится в 4 минутах от метро Красные ворота. А если вы на машине, то у нас есть своя парковка. \nСалон предоставляет высокий сервис, а мастера оказывают услуги выского профессионального уровня. \nНаши направления:\n* Парикмахерский зал;\n* Lash & brow bar;\n Мастера регулярно проходят обучение и повышение квалификации, что подтверждено многочисленными сертификатами. Работаем только на профессиональной косметики и аксессуарах: Lisap Milano, Emsibeth Italy, Comfort Zone, Goldwell, Framar и другие.\nПодробнее можно ознакомиться с ценами на услуги и акциями на официальном сайте наше группы салона.\nДо встречи в Scissors Studio.",
+    "logo": 127,
+    "is_active": true,
+    "position": 0,
+    "yclients_company_id": "128411",
+    "last_synced_at": "2026-08-25T17:38:19.840Z"
+  }
+}
+]

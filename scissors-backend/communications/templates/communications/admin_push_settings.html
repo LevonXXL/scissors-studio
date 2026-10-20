@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+  <div class="max-w-2xl rounded-default border border-base-200 bg-white p-6 dark:border-base-700 dark:bg-base-900">
+    <h1 class="mb-3 text-xl font-semibold">Push-уведомления об обращениях</h1>
+    <p class="mb-5">Разрешите уведомления в браузере, чтобы получать новые обращения на этом устройстве.</p>
+    <form id="staff-push-settings">
+      {% csrf_token %}
+      <label class="flex items-center gap-3">
+        <input id="staff-push-enabled" type="checkbox">
+        <span>Получать push-сообщения</span>
+      </label>
+    </form>
+    <p id="staff-push-status" class="mt-4" role="status"></p>
+  </div>
+  <div class="mt-6 max-w-2xl rounded-default border border-base-200 bg-white p-6 dark:border-base-700 dark:bg-base-900">
+    <h2 class="mb-3 text-xl font-semibold">Email для входа на сайт</h2>
+    <p class="mb-4">Подтвердите свой email, затем входите в профиль на сайте с этим адресом и паролем Django Admin.</p>
+    <form id="staff-email-settings" class="flex flex-col gap-3">
+      <label for="staff-email-address">Email</label>
+      <input id="staff-email-address" type="email" value="{{ request.user.email }}" required class="w-full max-w-2xl rounded-default border px-3 py-2">
+      <label for="staff-email-password">Текущий пароль, если меняете уже подтверждённый email</label>
+      <input id="staff-email-password" type="password" class="w-full max-w-2xl rounded-default border px-3 py-2">
+      <button type="submit" class="rounded-default bg-primary-600 px-4 py-2 text-white">Отправить ссылку подтверждения</button>
+    </form>
+    <p id="staff-email-status" class="mt-4" role="status"></p>
+  </div>
+  <script defer src="{% static 'communications/admin_push.js' %}"></script>
+{% endblock %}

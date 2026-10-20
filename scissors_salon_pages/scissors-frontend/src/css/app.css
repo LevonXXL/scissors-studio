@@ -1,0 +1,32 @@
+/* Self-hosted Inter — вместо Google Fonts (см. технический аудит: лишний
+   внешний домен и связанная задержка загрузки шрифта) */
+@import '@fontsource/inter/300.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+/* Новая палитра бренда: чёрный/белый — основные, #C5291C — акцент для
+   отдельных важных элементов (CTA, подпись "by Stets", активные состояния).
+   Не заливать акцентом весь UI — по ТЗ он для небольшого числа элементов. */
+:root {
+  --q-primary: #000000;
+  --q-secondary: #1e1e1e;
+
+  --sc-accent: #C5291C;
+  --sc-text-primary: #000000;
+  --sc-text-secondary: #505050;
+  --sc-text-muted: #aeaeae;
+  --sc-bg: #ffffff;
+  --sc-bg-muted: #f5f5f5;
+  --sc-border: #e0e0e0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--sc-text-primary);
+}
+
+a {
+  color: var(--sc-text-primary);
+}
