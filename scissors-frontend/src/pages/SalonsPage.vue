@@ -14,10 +14,10 @@
           <q-card flat bordered class="full-height overflow-hidden">
             <q-img
               v-if="coverImage(salon) && !failedImages.has(salon.id)"
-              :src="coverImage(salon)"
+              :src="coverSource(salon)"
               :alt="`Салон ${salon.name}`"
               style="height: 220px"
-              @error="failedImages.add(salon.id)"
+              @error="handleImageError(salon)"
             />
             <div v-else class="salon-image-placeholder flex flex-center bg-grey-2 text-grey-6">
               <q-icon name="storefront" size="48px" />
@@ -50,16 +50,34 @@ export default {
 import { computed, ref } from 'vue';
 import { useMeta } from 'quasar';
 import type { Salon } from '@/api/types';
+import { getThumbnailUrl } from '@/utils/thumbnailUrl';
+import { MEDIA_URL } from '@/config/urls';
 
 const pagesStore = usePagesStore();
 const salonsStore = useSalonsStore();
 const page = computed(() => pagesStore.byPath.salons ?? null);
 const failedImages = ref(new Set<number>());
+const failedPreviews = ref(new Set<number>());
 void pagesStore.load('salons');
 void salonsStore.loadList();
 
 function coverImage(salon: Salon): string | undefined {
   return salon.photos.find((photo) => !!photo.image)?.image;
+}
+
+function coverSource(salon: Salon): string | undefined {
+  const original = coverImage(salon);
+  return original && !failedPreviews.value.has(salon.id)
+    ? getThumbnailUrl(original, 800, MEDIA_URL)
+    : original;
+}
+
+function handleImageError(salon: Salon) {
+  if (!failedPreviews.value.has(salon.id) && coverSource(salon) !== coverImage(salon)) {
+    failedPreviews.value.add(salon.id);
+  } else {
+    failedImages.value.add(salon.id);
+  }
 }
 
 useMeta(() => ({

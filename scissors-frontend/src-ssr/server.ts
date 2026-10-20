@@ -33,6 +33,15 @@ declare module "#q-app" {
  */
 export const create = defineSsrCreate(async (/* { ... } */) => {
   const app = express();
+  const siteUrl = import.meta.env.VITE_SITE_URL;
+  const apiOrigin = new URL(import.meta.env.VITE_API_BASE_URL).origin;
+  const mediaOrigin = new URL(import.meta.env.VITE_MEDIA_URL).origin;
+
+  app.get('/robots.txt', (_request, response) => {
+    response.type('text/plain').send(
+      `User-agent: *\nAllow: /\nDisallow: /login\nDisallow: /admin/\nDisallow: /api/\n\nSitemap: ${siteUrl}/sitemap.xml\n`,
+    );
+  });
 
   if (import.meta.env.QUASAR_PROD) {
     /**
@@ -44,11 +53,8 @@ export const create = defineSsrCreate(async (/* { ... } */) => {
       helmet({
         contentSecurityPolicy: {
           directives: {
-            connectSrc: [
-              "'self'",
-              "https://api.scissors-studio.ru",
-              "http://localhost:8000",
-            ],
+            connectSrc: ["'self'", apiOrigin],
+            imgSrc: ["'self'", "data:", apiOrigin, mediaOrigin],
           },
         },
       }),

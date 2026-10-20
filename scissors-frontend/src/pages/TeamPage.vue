@@ -64,8 +64,9 @@
           <!-- Фото мастера -->
           <q-img
               v-if="master.photo"
-              :src="master.photo"
+              :src="masterPhotoSource(master.id, master.photo)"
               class="bg-grey-2"
+              @error="failedPreviews.add(master.id)"
           >
             <template v-slot:loading>
               <div class="flex flex-center">
@@ -156,10 +157,17 @@ import { ref, computed, onServerPrefetch } from 'vue';
 import { useMeta } from 'quasar';
 import { useTeamStore } from '@/stores/team';
 import { usePagesStore } from '@/stores/pages-store';
+import { getThumbnailUrl } from '@/utils/thumbnailUrl';
+import { MEDIA_URL } from '@/config/urls';
 
 const teamStore = useTeamStore();
 const pagesStore = usePagesStore();
 const teamPage = computed(() => pagesStore.byPath.team ?? null);
+const failedPreviews = ref(new Set<number>());
+
+function masterPhotoSource(id: number, photo: string): string {
+  return failedPreviews.value.has(id) ? photo : getThumbnailUrl(photo, 600, MEDIA_URL);
+}
 
 // Запускаем загрузку один раз сразу (работает и на сервере, и на клиенте).
 // onServerPrefetch просто дожидается этого же промиса на сервере — без

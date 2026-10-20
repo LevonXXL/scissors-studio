@@ -49,10 +49,17 @@
           <q-card flat bordered square class="review-card full-height overflow-hidden column no-wrap">
             <q-img
               v-if="review.has_images && review.images[0]"
-              :src="review.images[0].image || review.images[0].preview"
-              class="review-image bg-grey-3"
+              :src="reviewImageSource(review.images[0])"
+              class="review-image bg-grey-3 cursor-pointer"
               height="180px"
               fit="cover"
+              role="button"
+              tabindex="0"
+              :aria-label="`Открыть фотографии отзыва ${review.author || 'гостя'}`"
+              @click="openReviewImages(review)"
+              @keydown.enter.prevent="openReviewImages(review)"
+              @keydown.space.prevent="openReviewImages(review)"
+              @error="failedPreviews.add(review.images[0].image || review.images[0].preview || '')"
             />
             <q-card-section class="review-content col column no-wrap q-pa-sm">
               <div class="row items-center justify-between q-mb-xs">
@@ -87,6 +94,7 @@
         @click="scrollBy(1)"
       />
     </div>
+    <ImageLightbox v-model="lightboxOpen" :images="lightboxImages" />
   </section>
 </template>
 
@@ -95,6 +103,9 @@ import { computed, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } fr
 import { fetchReviews, fetchSalons } from '@/api/endpoints';
 import type { Review, ReviewSource, Salon } from '@/api/types';
 import { REVIEW_SOURCE_LABELS } from '@/api/types';
+import ImageLightbox from '@/components/ImageLightbox.vue';
+import { getThumbnailUrl } from '@/utils/thumbnailUrl';
+import { MEDIA_URL } from '@/config/urls';
 
 const props = withDefaults(defineProps<{
   /** Если задан — компонент показывает отзывы только этого салона и прячет
@@ -113,6 +124,22 @@ const lockedSalonId = computed(() => props.salonId);
 const reviews = ref<Review[]>([]);
 const loading = ref(true);
 const salons = ref<Salon[]>([]);
+const failedPreviews = ref(new Set<string>());
+const lightboxOpen = ref(false);
+const lightboxImages = ref<{ src: string; alt: string }[]>([]);
+
+function reviewImageSource(image: Review['images'][number]): string {
+  const original = image.image || image.preview || '';
+  return failedPreviews.value.has(original) ? original : getThumbnailUrl(original, 500, MEDIA_URL);
+}
+
+function openReviewImages(review: Review) {
+  lightboxImages.value = review.images
+    .map((image) => image.image || image.preview || '')
+    .filter(Boolean)
+    .map((src) => ({ src, alt: `Фото из отзыва ${review.author || 'гостя'}` }));
+  lightboxOpen.value = lightboxImages.value.length > 0;
+}
 
 const selectedSalonId = ref<number | null>(props.salonId ?? null);
 const selectedSource = ref<ReviewSource | null>(null);

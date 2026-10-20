@@ -3,15 +3,7 @@
     <template v-if="page">
       <h1>{{ page.title }}</h1>
       <div class="page-content" v-html="page.content" />
-      <div v-if="page.pictures.length" class="row q-gutter-md q-mt-md">
-        <q-img
-          v-for="pic in page.pictures"
-          :key="pic.id"
-          :src="pic.image"
-          :alt="pic.alt"
-          style="width: 240px; height: 180px"
-        />
-      </div>
+      <ImageGallery v-if="pictures.length" :images="pictures" class="q-mt-md" :ratio="4 / 3" />
     </template>
     <div v-else-if="loading" class="text-center q-pa-xl">
       <q-spinner color="primary" size="3em" />
@@ -27,6 +19,7 @@ import { useRoute } from 'vue-router';
 import { useMeta } from 'quasar';
 import { computed, onServerPrefetch, ref, watch } from 'vue';
 import { usePagesStore } from '@/stores/pages-store';
+import ImageGallery from '@/components/ImageGallery.vue';
 
 const route = useRoute();
 const pagesStore = usePagesStore();
@@ -39,6 +32,11 @@ const urlPath = computed(() => {
 });
 
 const page = computed(() => pagesStore.byPath[urlPath.value] ?? null);
+const pictures = computed(() => page.value?.pictures.filter((pic) => !!pic.image).map((pic) => ({
+  id: pic.id,
+  src: pic.image,
+  alt: pic.alt || page.value?.title || '',
+})) ?? []);
 const loading = ref(false);
 
 // Запускаем загрузку один раз сразу (работает и на сервере, и на клиенте).

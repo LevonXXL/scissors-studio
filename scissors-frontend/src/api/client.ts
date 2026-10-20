@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { API_BASE_URL } from '@/config/urls';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = API_BASE_URL;
 
 if (!BASE_URL) {
   console.warn('[API] VITE_API_BASE_URL не задан');

@@ -28,11 +28,7 @@
 
       <section v-if="photos.length" class="q-mb-xl">
         <h2 class="text-h5 text-weight-bold q-mb-md">Фотографии салона</h2>
-        <div class="row q-col-gutter-md">
-          <div v-for="photo in photos" :key="photo.id" class="col-12 col-sm-6 col-md-4">
-            <q-img :src="photo.image" :alt="`Салон ${salon.name}`" ratio="1.5" class="rounded-borders" />
-          </div>
-        </div>
+        <ImageGallery :images="photos" />
       </section>
 
       <section v-if="hasCoordinates" class="q-mb-xl">
@@ -80,12 +76,17 @@ import { computed, ref, watch } from 'vue';
 import { useMeta } from 'quasar';
 import YandexMap from '@/components/YandexMap.vue';
 import ReviewsSection from '@/components/ReviewsSection.vue';
+import ImageGallery from '@/components/ImageGallery.vue';
 
 const props = defineProps<{ slug: string }>();
 const salonsStore = useSalonsStore();
 const slug = computed(() => props.slug);
 const salon = computed(() => salonsStore.bySlug[slug.value] ?? null);
-const photos = computed(() => salon.value?.photos.filter((photo) => !!photo.image) ?? []);
+const photos = computed(() => salon.value?.photos.filter((photo) => !!photo.image).map((photo) => ({
+  id: photo.id,
+  src: photo.image,
+  alt: `Салон ${salon.value?.name || ''}`,
+})) ?? []);
 const mapUnavailable = ref(false);
 const hasCoordinates = computed(() => {
   const coordinates = salon.value?.coordinates;

@@ -1,6 +1,10 @@
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from xml.etree import ElementTree
 
 from django.core.management import call_command
+from django.conf import settings
 from django.test import TestCase
 
 from masters.models import Master
@@ -8,7 +12,40 @@ from salons.models import Salon
 from services.models import Service, ServiceCategory
 
 from .management.commands.populate_site_pages import LEGACY_PRIVACY_CONTENT, PRIVACY_CONTENT
+from .management.commands.generate_sitemap import public_paths
 from .models import Page
+
+
+class SitemapTests(TestCase):
+    def test_command_lists_only_public_pages_and_active_salons(self):
+        salons = Page.objects.create(title='Салоны', url='salons')
+        Page.objects.create(title='О нас', url='about')
+        Page.objects.create(title='Черновик', url='draft', is_published=False)
+        Page.objects.create(title='Вход', url='login')
+        active_page = Page.objects.create(title='Открытый', url='open', parent=salons)
+        inactive_page = Page.objects.create(title='Закрытый', url='closed', parent=salons)
+        for slug, page, active in (
+            ('open', active_page, True), ('closed', inactive_page, False),
+        ):
+            Salon.objects.create(
+                name=slug, slug=slug, page=page, address='Адрес',
+                latitude='0', longitude='0', is_active=active,
+            )
+
+        self.assertEqual(public_paths(), ['', 'about', 'price-list', 'salons', 'salons/open'])
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / 'sitemap.xml'
+            call_command('generate_sitemap', '--output', str(output), stdout=StringIO())
+            root = ElementTree.parse(output).getroot()
+            namespace = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+            locations = [node.text for node in root.findall('s:url/s:loc', namespace)]
+            self.assertEqual(locations, [
+                f'{settings.SITE_URL}/',
+                f'{settings.SITE_URL}/about',
+                f'{settings.SITE_URL}/price-list',
+                f'{settings.SITE_URL}/salons',
+                f'{settings.SITE_URL}/salons/open',
+            ])
 
 
 class PagePathTests(TestCase):

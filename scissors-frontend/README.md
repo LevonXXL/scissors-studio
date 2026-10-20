@@ -23,7 +23,14 @@ quasar build -m ssr  # прод-сборка SSR
 quasar build -m pwa  # прод-сборка PWA
 ```
 
-`.env` — `VITE_API_BASE_URL` (Django) и `VITE_YANDEX_MAPS_API_KEY`.
+Публичные адреса задаются при сборке: `SITE_URL` (канонический адрес
+сайта), `API_ORIGIN` (адрес Django API), `MEDIA_URL` (адрес медиафайлов).
+При необходимости можно задать `VITE_SITE_URL`, `VITE_API_BASE_URL` и
+`VITE_MEDIA_URL` отдельно для frontend. В разработке используются
+`localhost:9100` и `localhost:8000`; в production значения по умолчанию
+соответствуют текущим доменам. Для Яндекс.Карт нужен
+`VITE_YANDEX_MAPS_API_KEY`. После смены `SITE_URL` пересоберите SSR/PWA;
+`/robots.txt` формируется SSR из этого адреса.
 
 ## Структура страниц
 

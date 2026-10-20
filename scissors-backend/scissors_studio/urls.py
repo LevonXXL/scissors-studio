@@ -4,8 +4,10 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from communications.views import admin_push_service_worker, admin_push_settings
+from core_utils.thumbnails import thumbnail
 
 urlpatterns = [
+    path('thumbnail/<int:width>/<path:source_path>', thumbnail, name='thumbnail'),
     path('admin/push-settings/', admin.site.admin_view(admin_push_settings), name='admin-push-settings'),
     path('admin/push-sw.js', admin_push_service_worker, name='admin-push-sw'),
     path('admin/', admin.site.urls),
@@ -23,5 +25,5 @@ urlpatterns = [
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-if settings.DEBUG:
+if settings.DEBUG and settings.MEDIA_URL.startswith('/'):
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -4,6 +4,16 @@
 import { defineConfig } from '#q-app';
 
 export default defineConfig((ctx) => {
+  const siteUrl = process.env.VITE_SITE_URL || process.env.SITE_URL
+    || (ctx.dev ? 'http://localhost:9100' : 'https://scissors-studio.ru');
+  const apiOrigin = process.env.API_ORIGIN
+    || (ctx.dev ? 'http://localhost:8000' : 'https://api.scissors-studio.ru');
+  const apiBaseUrl = process.env.VITE_API_BASE_URL || `${apiOrigin.replace(/\/$/, '')}/api/v1`;
+  const mediaUrl = new URL(
+    process.env.VITE_MEDIA_URL || process.env.MEDIA_URL || '/media/',
+    new URL(apiBaseUrl).origin,
+  ).href;
+
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
     preFetch: true,
@@ -42,11 +52,9 @@ export default defineConfig((ctx) => {
       },
 
       define: {
-        'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
-            process.env.VITE_API_BASE_URL || (
-              ctx.dev ? 'http://localhost:8000/api/v1' : 'https://api.scissors-studio.ru/api/v1'
-            )
-        ),
+        'import.meta.env.VITE_SITE_URL': JSON.stringify(siteUrl.replace(/\/$/, '')),
+        'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBaseUrl),
+        'import.meta.env.VITE_MEDIA_URL': JSON.stringify(mediaUrl),
       },
 
       typescript: {

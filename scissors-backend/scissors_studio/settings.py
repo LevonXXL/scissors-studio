@@ -34,6 +34,12 @@ SECRET_KEY = config('SECRET_KEY')
 
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
+# Public origins are configured once per deployment; SITE_URL is shared with
+# the frontend build, while STATIC_URL and MEDIA_URL can point to a CDN.
+SITE_URL = (os.environ.get('SITE_URL') or os.environ.get('FRONTEND_BASE_URL')
+            or ('http://localhost:9100' if DEBUG else 'https://scissors-studio.ru')).rstrip('/')
+API_ORIGIN = os.environ.get('API_ORIGIN', 'http://localhost:8000' if DEBUG else 'https://api.scissors-studio.ru').rstrip('/')
+
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1', cast=Csv())
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
@@ -176,10 +182,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = os.environ.get('STATIC_URL', f'{API_ORIGIN}/static/' if not DEBUG else '/static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = '/media/'
+MEDIA_URL = os.environ.get('MEDIA_URL', f'{API_ORIGIN}/media/' if not DEBUG else '/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -207,7 +213,7 @@ WEB_PUSH_VAPID_PRIVATE_KEY = os.environ.get('WEB_PUSH_VAPID_PRIVATE_KEY', '')
 WEB_PUSH_VAPID_SUBJECT = os.environ.get('WEB_PUSH_VAPID_SUBJECT', '')
 
 # Confirmation links are sent only when a sender and frontend origin are set.
-FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:9100' if DEBUG else '')
+FRONTEND_BASE_URL = SITE_URL
 EMAIL_FROM_ADDRESS = os.environ.get('EMAIL_FROM_ADDRESS', 'noreply@scissors.local' if DEBUG else '')
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',
@@ -240,12 +246,11 @@ THUMBNAIL_PROCESSORS = (
     'easy_thumbnails.processors.filters',
 )
 
-# В разработке фронтенд (Quasar dev-server) обычно крутится на localhost:9000/9200 —
-# для продакшена сузить до реального домена scissors-studio.ru.
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:9000',
-    'http://localhost:9200',
-]
+# Keep the configured public site reachable when the frontend host changes.
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
+    SITE_URL,
+    *config('CORS_ALLOWED_ORIGINS', default='http://localhost:9000,http://localhost:9200', cast=Csv()),
+]))
 CORS_ALLOW_CREDENTIALS = True
 
 CKEDITOR_5_CONFIGS = {

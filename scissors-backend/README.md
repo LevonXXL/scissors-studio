@@ -22,6 +22,18 @@ python manage.py runserver
 Админка: http://localhost:8000/admin/
 API: http://localhost:8000/api/v1/
 
+Публичные адреса настраиваются переменными `SITE_URL` (канонический адрес
+сайта), `API_ORIGIN` (адрес Django API), `STATIC_URL` (статика Django) и
+`MEDIA_URL` (загруженные файлы). Например, для отдельного хоста файлов:
+`STATIC_URL=https://static.scissors.online/static/` и
+`MEDIA_URL=https://static.scissors.online/media/`. Frontend должен получить
+тот же `SITE_URL` и `MEDIA_URL` при сборке. На файловом хосте нужно отдавать
+`/static/`, `/media/` и `/thumbnail/`; Django настройки не настраивают Angie.
+После смены `SITE_URL` заново выполните `generate_sitemap`. Адрес
+`FRONTEND_BASE_URL` для email-ссылок теперь берётся из `SITE_URL` (старое
+имя переменной остаётся резервным вариантом). `ALLOWED_HOSTS` по-прежнему
+задаётся отдельно для хоста API.
+
 ## Модели
 
 ### `Page` (pages/models.py)
@@ -73,7 +85,8 @@ API: http://localhost:8000/api/v1/
 
 ## CORS
 
-В `settings.py` разрешены `localhost:9000` и `localhost:9200` (дефолтные порты Quasar dev-server). Для продакшена сузить `CORS_ALLOWED_ORIGINS` до `https://scissors-studio.ru`.
+В `settings.py` к `CORS_ALLOWED_ORIGINS` добавляется настроенный `SITE_URL`;
+остальные origin можно задать одноимённой переменной через запятую.
 
 ## Медиатека (django-filer)
 

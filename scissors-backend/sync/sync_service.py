@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 from django.utils import timezone
 
@@ -25,6 +26,8 @@ from services.models import Service, ServiceCategory, ServiceStaffPrice
 
 from .client import YClientsDataClient
 from .images import fetch_and_store_image
+from .identifiers import staff_name as _staff_name, yclients_id as _yclients_id
+from .master_dedup import UnsafeMasterMerge, reconcile_master_duplicate
 
 logger = logging.getLogger(__name__)
 
@@ -84,38 +87,79 @@ def _sync_salon_photos(salon: Salon, photo_paths: list[str]) -> None:
 def sync_staff(salon, client):
     staff_list = client.get_staff(salon.yclients_company_id)
     result = {}  # {relationship_id: Master} — для сопоставления цен в sync_services
+    name_counts = Counter(_staff_name(entry.get('name')) for entry in staff_list)
 
     for entry in staff_list:
-        relationship_id = str(entry['id'])
-        user_id = str(entry['user_id']) if entry.get('user_id') else None
+        relationship_id = _yclients_id(entry.get('id'))
+        if relationship_id is None:
+            logger.warning('YCLIENTS вернул сотрудника без id связи с салоном %s — пропускаю.', salon.pk)
+            continue
+        user_id = _yclients_id(entry.get('user_id'))
         is_system = user_id is None
 
-        if is_system:
-            # Нет стабильной "личности" для дедупликации между салонами —
-            # ищем строго в рамках уже известной связи с этим салоном.
-            master = Master.objects.filter(
-                is_system=True, yclients_staff_id=relationship_id, salons=salon,
-            ).first()
-            created = master is None
-            if created:
-                master = Master.objects.create(
-                    is_system=True,
-                    yclients_staff_id=relationship_id,
-                    name=entry.get('name', ''),
-                    status=Master.STATUS_SELF_EMPLOYED,
-                    category=Master.CATEGORY_UNIVERSAL,
-                )
-        else:
-            master, created = Master.objects.get_or_create(
-                yclients_user_id=user_id,
-                defaults={
-                    'name': entry.get('name', ''),
-                    'status': Master.STATUS_SELF_EMPLOYED,
-                    'category': Master.CATEGORY_UNIVERSAL,
-                },
-            )
-            master.yclients_staff_id = relationship_id  # последнее увиденное значение
+        # entry.id is the per-salon staff/link ID; entry.user_id is the
+        # cross-salon person ID. Never substitute one for the other.
+        link = MasterSalon.objects.select_related('master').filter(yclients_staff_id=relationship_id).first()
+        if link and link.salon_id != salon.pk:
+            logger.warning('YCLIENTS staff id %s уже привязан к другому салону — пропускаю.', relationship_id)
+            continue
 
+        by_user = Master.objects.filter(yclients_user_id=user_id).first() if user_id else None
+        if link and by_user and link.master_id != by_user.pk:
+            logger.warning('YCLIENTS staff id %s и user_id %s указывают на разных мастеров — пропускаю.', relationship_id, user_id)
+            continue
+
+        master = by_user or (link.master if link else None)
+        if master is None:
+            # Legacy records can have a known staff ID on Master but a blank
+            # ID on the salon link. Only consider records linked to this salon.
+            legacy = list(Master.objects.filter(
+                master_salons__salon=salon, yclients_staff_id=relationship_id,
+            ).distinct()[:2])
+            if len(legacy) == 1:
+                master = legacy[0]
+
+        if master is None:
+            # Last resort for old rows whose IDs are all blank or '-'. Names
+            # are usable only when unique in both the API response and salon.
+            name = _staff_name(entry.get('name'))
+            if name:
+                candidates = [
+                    existing.master for existing in MasterSalon.objects.select_related('master').filter(salon=salon)
+                    if _yclients_id(existing.yclients_staff_id) is None
+                    and _staff_name(existing.master.name) == name
+                    and existing.master.is_system == is_system
+                    and _yclients_id(existing.master.yclients_user_id) in {None, user_id}
+                    and _yclients_id(existing.master.yclients_staff_id) in {None, relationship_id}
+                ]
+                if name_counts[name] == 1 and len(candidates) == 1:
+                    master = candidates[0]
+                elif candidates:
+                    logger.warning(
+                        'Неоднозначная привязка существующего мастера к YCLIENTS staff id %s в салоне %s; '
+                        'старые записи не изменены.', relationship_id, salon.pk,
+                    )
+
+        if master is not None and (
+            master.is_system != is_system
+            or _yclients_id(master.yclients_user_id) not in {None, user_id}
+        ):
+            logger.warning('YCLIENTS IDs для мастера %s противоречат существующей записи — пропускаю.', master.pk)
+            continue
+
+        if master is None:
+            master = Master(
+                is_system=is_system,
+                name=entry.get('name', ''),
+                status=Master.STATUS_SELF_EMPLOYED,
+                category=Master.CATEGORY_UNIVERSAL,
+            )
+
+        if user_id:
+            master.yclients_user_id = user_id
+        elif _yclients_id(master.yclients_user_id) is None:
+            master.yclients_user_id = None
+        master.yclients_staff_id = relationship_id  # только справочное последнее значение
         master.name = entry.get('name') or master.name
         master.specialization = entry.get('specialization') or master.specialization
         master.is_active = not (entry.get('fired') or entry.get('hidden'))
@@ -126,6 +170,43 @@ def sync_staff(salon, client):
             salon=salon,
             defaults={'yclients_staff_id': relationship_id},
         )
+
+        # Prefer an exact legacy staff ID. If both old IDs are blank, require
+        # a unique name in this salon. The merge helper checks related data.
+        if user_id:
+            known_staff_ids = {
+                _yclients_id(staff_id)
+                for staff_id in MasterSalon.objects.filter(master=master).values_list('yclients_staff_id', flat=True)
+            }
+            candidates = [
+                old_link.master.pk
+                for old_link in MasterSalon.objects.select_related('master').filter(salon=salon).exclude(master=master)
+                if _yclients_id(old_link.yclients_staff_id) is None
+                and _yclients_id(old_link.master.yclients_user_id) is None
+                and old_link.master.is_system == master.is_system
+                and (
+                    _yclients_id(old_link.master.yclients_staff_id) in known_staff_ids - {None}
+                    or (
+                        _yclients_id(old_link.master.yclients_staff_id) is None
+                        and name_counts[_staff_name(master.name)] == 1
+                        and _staff_name(old_link.master.name) == _staff_name(master.name)
+                    )
+                )
+            ]
+            if len(candidates) == 1:
+                try:
+                    reconcile_master_duplicate(master.pk, candidates[0], apply=True)
+                except UnsafeMasterMerge as exc:
+                    logger.warning(
+                        'Дубль мастера %s в салоне %s не объединён: %s', candidates[0], salon.pk, exc,
+                    )
+                else:
+                    logger.info('Дубль мастера %s объединён с %s в салоне %s.', candidates[0], master.pk, salon.pk)
+            elif len(candidates) > 1:
+                logger.warning(
+                    'Неоднозначные дубли мастера %s в салоне %s: записи %s; пропускаю объединение.',
+                    master.pk, salon.pk, ', '.join(str(pk) for pk in sorted(candidates)),
+                )
 
         result[relationship_id] = master
 

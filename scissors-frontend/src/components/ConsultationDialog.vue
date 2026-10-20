@@ -64,6 +64,7 @@ import { ApiError } from '@/api/client';
 import { createFeedbackRequest } from '@/api/endpoints';
 import { messengerLinks, type MessengerLink } from '@/data/contacts';
 import { formatFeedbackMessage, messengerHref, primaryMessengerHref, telegramShareHref, type FeedbackDraft } from '@/data/feedbackMessenger';
+import { SITE_URL } from '@/config/urls';
 
 const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
@@ -86,7 +87,7 @@ function currentDraft(): FeedbackDraft {
 }
 
 function siteUrl(): string {
-  return typeof window === 'undefined' ? 'https://scissors-studio.ru/' : `${window.location.origin}/`;
+  return `${SITE_URL}/`;
 }
 
 watch(() => props.modelValue, (open) => {

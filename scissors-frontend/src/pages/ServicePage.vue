@@ -114,6 +114,7 @@ import { useMeta } from 'quasar';
 import { serviceCategories } from '@/data/services';
 import { useSalonStore } from '@/stores/salon';
 import type { SalonSlug } from '@/stores/salon';
+import { SITE_URL } from '@/config/urls';
 
 const route = useRoute();
 const salonStore = useSalonStore();
@@ -179,7 +180,7 @@ useMeta(() => ({
     }
   },
   link: category.value ? {
-    canonical: { rel: 'canonical', href: `https://scissors-studio.ru/services/${category.value.slug}` }
+    canonical: { rel: 'canonical', href: `${SITE_URL}/services/${category.value.slug}` }
   } : undefined
 }));
 </script>
