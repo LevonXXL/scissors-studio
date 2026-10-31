@@ -1,5 +1,5 @@
 // src/data/masters.ts
-import type { SalonSlug } from 'src/data/salons';
+import type { SalonSlug } from '@/data/salons';
 
 export interface Master {
   id: string;

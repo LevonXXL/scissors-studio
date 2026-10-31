@@ -33,14 +33,14 @@ class Command(BaseCommand):
         )
 
         anna = Master.objects.create(
-            name='Анна Иванова', specialization='Стрижки, окрашивание',
-            category=Master.CATEGORY_STYLIST, status=Master.STATUS_SELF_EMPLOYED,
+            name='Анна Иванова',
+            price_level='stylist', status=Master.STATUS_SELF_EMPLOYED,
             bio='Топ-стилист, специализация — сложное окрашивание.',
         )
         anna.salons.add(moscow)
         maria = Master.objects.create(
-            name='Мария Петрова', specialization='Ногтевой сервис',
-            category=Master.CATEGORY_UNIVERSAL, status=Master.STATUS_IP,
+            name='Мария Петрова',
+            price_level='nail_master', status=Master.STATUS_IP,
         )
         maria.salons.add(zelenograd)
 

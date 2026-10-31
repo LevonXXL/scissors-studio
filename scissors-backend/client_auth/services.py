@@ -125,7 +125,7 @@ def request_code(request, phone):
     return deliver_code(phone, code)
 
 
-def verify_code(request, phone, code):
+def verify_code(request, phone, code, target_user=None):
     throttle(request, 'verify', phone, 10, 50, 15 * 60)
     error = False
     user = None
@@ -160,9 +160,21 @@ def verify_code(request, phone, code):
                     matched_code.consumed_at = accepted_at
                     matched_code.save(update_fields=['consumed_at'])
                     identity = VerifiedPhone.objects.select_related('user').filter(phone=phone).first()
-                    if identity:
+                    if target_user is not None:
+                        User = get_user_model()
+                        user = User.objects.select_for_update().get(pk=target_user.pk)
+                        if (not user.is_active or
+                                (identity and identity.user_id != user.pk) or
+                                User.objects.filter(username=phone).exclude(pk=user.pk).exists()):
+                            error = True
+                        elif identity:
+                            identity.verified_at = accepted_at
+                            identity.save(update_fields=['verified_at'])
+                        else:
+                            VerifiedPhone.objects.create(user=user, phone=phone, verified_at=accepted_at)
+                    elif identity:
                         user = identity.user
-                        if not user.is_active or user.is_staff or user.is_superuser:
+                        if not user.is_active:
                             error = True
                         else:
                             identity.verified_at = accepted_at
@@ -184,10 +196,10 @@ def verify_code(request, phone, code):
 
 def password_login(request, phone, password):
     throttle(request, 'password', phone, 5, 30, 15 * 60)
-    authenticated = authenticate(request=request, username=phone, password=password)
     identity = VerifiedPhone.objects.select_related('user').filter(phone=phone).first()
     user = identity.user if identity else None
-    if not user or authenticated != user or not user.is_active or user.is_staff or user.is_superuser or not user.has_usable_password():
+    authenticated = authenticate(request=request, username=user.get_username() if user else phone, password=password)
+    if not user or authenticated != user or not user.is_active or not user.has_usable_password():
         raise AuthenticationFailed(INVALID_LOGIN)
     return user
 
@@ -229,7 +241,7 @@ def request_email_verification(request, user, email, current_password=''):
     token = secrets.token_urlsafe(32)
     token_hash = salted_hmac('client-auth-email', token).hexdigest()
     now = timezone.now()
-    link = f'{settings.FRONTEND_BASE_URL.rstrip("/")}/login#verify_email={token}'
+    link = f'{settings.FRONTEND_BASE_URL.rstrip("/")}/login?verify_email={token}'
     try:
         with transaction.atomic():
             PendingEmailVerification.objects.update_or_create(
@@ -281,12 +293,13 @@ def verify_email_token(token):
 def profile_response(user):
     from communications.models import PushPreference
 
-    phone = VerifiedPhone.objects.filter(user=user).values_list('phone', flat=True).first() or ''
+    phones = list(VerifiedPhone.objects.filter(user=user).order_by('pk').values_list('phone', flat=True))
     email = VerifiedEmail.objects.filter(user=user).values_list('email', flat=True).first() or ''
     pending_email = PendingEmailVerification.objects.filter(user=user).values_list('email', flat=True).first() or ''
     return {
         'is_staff': bool(user.is_staff),
-        'phone': phone,
+        'phone': phones[0] if phones else '',
+        'phones': phones,
         'email': email,
         'pending_email': pending_email,
         'has_password': user.has_usable_password(),

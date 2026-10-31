@@ -1,10 +1,11 @@
 from django.urls import path
 
-from .views import ChangePasswordView, LoginEmailView, LoginPasswordView, MeView, RequestCodeView, RequestEmailVerificationView, SetPasswordView, VerifyCodeView, VerifyEmailView
+from .views import ChangePasswordView, LoginEmailView, LoginPasswordView, MeView, RequestCodeView, RequestEmailVerificationView, SetPasswordView, VerifyCodeView, VerifyEmailView, VerifyProfilePhoneView
 
 urlpatterns = [
     path('request-code/', RequestCodeView.as_view(), name='auth-request-code'),
     path('verify-code/', VerifyCodeView.as_view(), name='auth-verify-code'),
+    path('phone/verify/', VerifyProfilePhoneView.as_view(), name='auth-phone-verify'),
     path('login-password/', LoginPasswordView.as_view(), name='auth-login-password'),
     path('login-email/', LoginEmailView.as_view(), name='auth-login-email'),
     path('email/request-verification/', RequestEmailVerificationView.as_view(), name='auth-email-request-verification'),

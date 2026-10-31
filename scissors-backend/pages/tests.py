@@ -1,11 +1,19 @@
+from base64 import b64decode
+from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
-from django.core.management import call_command
+from django.apps import apps
 from django.conf import settings
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.db import connection
+from django.test import TestCase, override_settings
+from django.utils.html import format_html
+from filer.models import Image as FilerImage
 
 from masters.models import Master
 from salons.models import Salon
@@ -13,7 +21,7 @@ from services.models import Service, ServiceCategory
 
 from .management.commands.populate_site_pages import LEGACY_PRIVACY_CONTENT, PRIVACY_CONTENT
 from .management.commands.generate_sitemap import public_paths
-from .models import Page
+from .models import Page, PagePicture
 
 
 class SitemapTests(TestCase):
@@ -32,7 +40,7 @@ class SitemapTests(TestCase):
                 latitude='0', longitude='0', is_active=active,
             )
 
-        self.assertEqual(public_paths(), ['', 'about', 'price-list', 'salons', 'salons/open'])
+        self.assertEqual(public_paths(), ['', 'about', 'salons', 'salons/open', 'uslugi'])
         with TemporaryDirectory() as directory:
             output = Path(directory) / 'sitemap.xml'
             call_command('generate_sitemap', '--output', str(output), stdout=StringIO())
@@ -42,13 +50,84 @@ class SitemapTests(TestCase):
             self.assertEqual(locations, [
                 f'{settings.SITE_URL}/',
                 f'{settings.SITE_URL}/about',
-                f'{settings.SITE_URL}/price-list',
                 f'{settings.SITE_URL}/salons',
                 f'{settings.SITE_URL}/salons/open',
+                f'{settings.SITE_URL}/uslugi',
             ])
 
 
 class PagePathTests(TestCase):
+    def test_copied_master_bio_cleanup_preserves_edited_page_content(self):
+        team = Page.objects.create(title='Команда', url='team')
+        copied_page = Page.objects.create(title='Автоматическая', url='copied', parent=team)
+        edited_page = Page.objects.create(title='Авторская', url='edited', parent=team,
+                                          content='<p>Авторский текст</p>')
+        bio = '<p>Описание <strong>мастера</strong></p>'
+        Master.objects.create(name='Первый', page=copied_page, bio=bio)
+        Master.objects.create(name='Второй', page=edited_page, bio=bio)
+        copied_page.content = format_html('<p>{}</p>', bio)
+        copied_page.save(update_fields=['content'])
+
+        migration = import_module('masters.migrations.0019_remove_copied_bio_from_pages')
+        migration.remove_copied_bio(apps, SimpleNamespace(connection=connection))
+
+        copied_page.refresh_from_db()
+        edited_page.refresh_from_db()
+        self.assertEqual(copied_page.content, '')
+        self.assertEqual(edited_page.content, '<p>Авторский текст</p>')
+
+    def test_master_page_returns_profile_photo_bio_content_and_gallery(self):
+        team = Page.objects.create(title='Команда', url='team')
+        page = Page.objects.create(title='Страница Светланы', url='svetlana', parent=team,
+                                   content='<p>Дополнительный текст страницы</p>')
+        master = Master.objects.create(name='Светлана Миронова', page=page,
+                                       bio='<p>Стилист Светлана</p><ul><li>Обучение</li></ul>')
+        gif = b64decode('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=')
+
+        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
+            photo = FilerImage.objects.create(
+                original_filename='portrait.gif', name='Портрет',
+                file=SimpleUploadedFile('portrait.gif', gif, content_type='image/gif'),
+            )
+            work = FilerImage.objects.create(
+                original_filename='work.gif', name='Работа',
+                file=SimpleUploadedFile('work.gif', gif, content_type='image/gif'),
+            )
+            master.photo = photo
+            master.save(update_fields=['photo'])
+            PagePicture.objects.create(page=page, image=work, position=0)
+
+            response = self.client.get('/api/v1/pages/by-path/team/svetlana/')
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['master']['name'], master.name)
+            self.assertEqual(response.data['master']['bio'], master.bio)
+            self.assertTrue(response.data['master']['photo'].endswith(photo.url))
+            self.assertEqual(response.data['content'], page.content)
+            self.assertTrue(response.data['pictures'][0]['image'].endswith(work.url))
+
+    def test_old_catalogue_pages_are_not_public_after_excel_import(self):
+        root = Page.objects.get(url_path='uslugi')
+        old_category_page = Page.objects.create(title='Старые стрижки', url='old-cuts', parent=root)
+        old_service_page = Page.objects.create(title='Старая стрижка', url='old-cut', parent=old_category_page)
+        old_category = ServiceCategory.objects.create(
+            title='Старые стрижки', page=old_category_page, is_active=False,
+        )
+        Service.objects.create(category=old_category, page=old_service_page, title='Старая стрижка')
+        current_category_page = Page.objects.create(title='Для волос', url='hair', parent=root)
+        current_service_page = Page.objects.create(title='Женская стрижка', url='cut', parent=current_category_page)
+        current_category = ServiceCategory.objects.create(title='Для волос', code='hair', page=current_category_page)
+        Service.objects.create(category=current_category, page=current_service_page, title='Женская стрижка')
+        hidden_service_page = Page.objects.create(title='Скрытая услуга', url='hidden', parent=current_category_page)
+        Service.objects.create(
+            category=current_category, page=hidden_service_page, title='Скрытая услуга', is_active=False,
+        )
+
+        self.assertEqual(self.client.get('/api/v1/pages/by-path/uslugi/old-cuts/').status_code, 404)
+        self.assertEqual(self.client.get('/api/v1/pages/by-path/uslugi/old-cuts/old-cut/').status_code, 404)
+        self.assertEqual(self.client.get('/api/v1/pages/by-path/uslugi/hair/hidden/').status_code, 404)
+        self.assertEqual(self.client.get('/api/v1/pages/by-path/uslugi/hair/cut/').status_code, 200)
+
     def test_root_and_nested_paths_follow_hierarchy(self):
         home = Page.objects.create(title='Главная', url='')
         team = Page.objects.create(title='Команда', url='team')
@@ -99,7 +178,7 @@ class PagePathTests(TestCase):
 
     def test_content_population_reuses_existing_pages(self):
         old_team = Page.objects.create(title='Команда', url='komanda')
-        master = Master.objects.create(name='Тестовый мастер', specialization='Стрижки')
+        master = Master.objects.create(name='Тестовый мастер', bio='<p>Описание мастера</p>')
 
         call_command('populate_site_pages', stdout=StringIO())
         call_command('populate_site_pages', stdout=StringIO())
@@ -108,6 +187,8 @@ class PagePathTests(TestCase):
         self.assertEqual(Page.objects.filter(url_path='team').count(), 1)
         self.assertEqual(Page.objects.filter(url_path='privacy').count(), 1)
         self.assertEqual(Page.objects.filter(url_path=f'team/{master.slug}').count(), 1)
+        master.refresh_from_db()
+        self.assertEqual(master.page.content, '')
         old_team.refresh_from_db()
         self.assertEqual(old_team.url_path, 'team')
 
@@ -119,19 +200,8 @@ class PagePathTests(TestCase):
             )
             for number in (1, 2)
         ]
-        categories = [
-            ServiceCategory.objects.create(
-                salon=salon, title='Стрижки', yclients_category_id=str(number),
-            )
-            for number, salon in enumerate(salons, start=1)
-        ]
-        services = [
-            Service.objects.create(
-                category=category, title='Женская стрижка',
-                yclients_service_id=str(number),
-            )
-            for number, category in enumerate(categories, start=1)
-        ]
+        categories = [ServiceCategory.objects.create(title='Стрижки', code='hair')]
+        services = [Service.objects.create(category=categories[0], title='Женская стрижка')]
 
         call_command('populate_site_pages', stdout=StringIO())
         first_state = list(Page.objects.order_by('pk').values_list(
@@ -145,9 +215,9 @@ class PagePathTests(TestCase):
         for category, service in zip(categories, services):
             category.refresh_from_db()
             service.refresh_from_db()
-            self.assertEqual(category.page.parent.url_path, 'services')
+            self.assertEqual(category.page.parent.url_path, 'uslugi')
             self.assertEqual(service.page.parent_id, category.page_id)
-        self.assertNotEqual(categories[0].page_id, categories[1].page_id)
+        self.assertEqual(Page.objects.filter(url_path=categories[0].page.url_path).count(), 1)
 
     def test_population_uses_canonical_page_even_with_legacy_name_duplicate(self):
         canonical = Page.objects.create(title='О нас', url='about')
@@ -192,7 +262,7 @@ class PagePathTests(TestCase):
         call_command('populate_site_pages', '--only-privacy', stdout=StringIO())
         privacy.refresh_from_db()
         self.assertEqual(privacy.content, PRIVACY_CONTENT)
-        self.assertEqual(Page.objects.count(), 1)
+        self.assertEqual(Page.objects.count(), 2)
 
         privacy.title = 'Мой заголовок политики'
         privacy.content = '<p>Изменено в админке</p>'
@@ -201,4 +271,4 @@ class PagePathTests(TestCase):
         privacy.refresh_from_db()
         self.assertEqual(privacy.title, 'Мой заголовок политики')
         self.assertEqual(privacy.content, '<p>Изменено в админке</p>')
-        self.assertEqual(Page.objects.count(), 1)
+        self.assertEqual(Page.objects.count(), 2)

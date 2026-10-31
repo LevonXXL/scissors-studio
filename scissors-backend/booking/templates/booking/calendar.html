@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'booking/calendar.css' %}?v=master-columns-1">
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script defer src="{% static 'booking/vendor/fullcalendar/index.global.min.js' %}"></script>
+  <script defer src="{% static 'booking/vendor/fullcalendar/ru.global.min.js' %}"></script>
+  <script defer src="{% static 'booking/calendar.js' %}?v=master-columns-1"></script>
+{% endblock %}
+
+{% block content %}
+  <div class="booking-calendar-page">
+    <div class="booking-calendar-heading">
+      <div>
+        <h1>Календарь записей</h1>
+        <p>Время отображается по Москве. Нажмите на запись, чтобы открыть её для редактирования.</p>
+      </div>
+    </div>
+
+    <div class="booking-calendar-toolbar">
+      <label for="booking-salon">Филиал</label>
+      <select id="booking-salon">
+        {% for salon in calendar_salons %}
+          <option value="{{ salon.pk }}">{{ salon.name }}</option>
+        {% endfor %}
+      </select>
+      {% if calendar_can_add and calendar_salons %}
+        <a class="booking-create-link" href="{% url 'admin:booking_booking_add' %}?calendar_modal=1" data-booking-modal data-booking-create>Создать запись</a>
+      {% endif %}
+    </div>
+
+    <section class="booking-pending-list" aria-label="Заявки без подтверждения">
+      <h2>Ожидают подтверждения</h2>
+      {% for booking in pending_bookings %}
+        <a href="{% url 'admin:booking_booking_change' booking.pk %}?calendar_modal=1" data-booking-modal>
+          #{{ booking.pk }} · {{ booking.salon.name }} · {{ booking.client_name }} ·
+          {{ booking.requested_start|date:"d.m.Y H:i" }}{% if booking.requested_end %} — {{ booking.requested_end|date:"d.m.Y H:i" }}{% endif %}
+        </a>
+      {% empty %}
+        <p>Новых заявок нет.</p>
+      {% endfor %}
+    </section>
+
+    {% if calendar_salons %}
+      <div id="booking-calendar" data-events-url="{{ calendar_events_url }}"></div>
+      {{ calendar_masters|json_script:"booking-calendar-masters" }}
+      <section id="booking-master-day" class="booking-master-day" aria-label="Записи мастеров за день" hidden></section>
+      <p id="booking-calendar-error" role="alert" hidden></p>
+      <div class="booking-calendar-legend" aria-label="Статусы записей">
+        <span class="booking-status-confirmed">Подтверждена</span>
+        <span class="booking-status-completed">Завершена</span>
+        <span class="booking-status-no_show">Не пришёл</span>
+        <span class="booking-status-cancelled">Отменена</span>
+      </div>
+    {% else %}
+      <p>Филиалы пока не добавлены.</p>
+    {% endif %}
+  </div>
+
+  <dialog id="booking-calendar-dialog" class="booking-calendar-dialog" aria-label="Редактирование записи">
+    <div class="booking-dialog-heading">
+      <strong>Запись</strong>
+      <div>
+        <a id="booking-open-full" href="#" target="_blank" rel="noopener">Открыть полностью</a>
+        <button id="booking-close-dialog" type="button" aria-label="Закрыть">×</button>
+      </div>
+    </div>
+    <iframe id="booking-calendar-frame" title="Форма записи"></iframe>
+  </dialog>
+{% endblock %}

@@ -1,10 +1,15 @@
 <template>
   <q-page class="site-page q-px-md q-py-xl">
     <q-card class="q-mx-auto" style="max-width: 520px">
-      <q-card-section>
+      <q-card-section v-if="!auth.authenticated">
         <h1 class="text-h5 q-my-sm">Вход и профиль</h1>
         <p class="text-grey-7 q-mb-none">Войдите по телефону или подтверждённому email.</p>
       </q-card-section>
+
+      <q-tabs v-if="auth.authenticated && !verificationToken" v-model="activeSection" align="left" active-color="primary" indicator-color="primary">
+        <q-tab name="bookings" label="Записи" no-caps />
+        <q-tab name="profile" label="Профиль" no-caps />
+      </q-tabs>
 
       <q-card-section v-if="verificationToken" class="q-gutter-md">
         <p class="q-my-none">Подтвердите адрес электронной почты для входа по email и паролю.</p>
@@ -46,8 +51,23 @@
         </template>
       </q-card-section>
 
-      <q-card-section v-else class="q-gutter-md">
-        <p v-if="auth.phone" class="q-my-none">Подтверждённый номер: {{ auth.phone }}</p>
+      <q-card-section v-else-if="activeSection === 'profile'" class="q-gutter-md">
+        <div class="text-subtitle1 text-weight-medium">Телефоны для входа и ваших записей</div>
+        <q-list v-if="auth.phones.length" bordered separator>
+          <q-item v-for="verifiedPhone in auth.phones" :key="verifiedPhone">
+            <q-item-section avatar><q-icon name="verified" color="positive" /></q-item-section>
+            <q-item-section>{{ verifiedPhone }}</q-item-section>
+          </q-item>
+        </q-list>
+        <p v-else class="text-body2 q-my-none">Подтверждённых номеров пока нет.</p>
+        <div class="text-subtitle2 text-weight-medium">Добавить номер</div>
+        <p class="text-body2 q-my-none">После подтверждения по SMS по этому номеру можно будет входить и находить записи.</p>
+        <q-input v-model="profilePhone" outlined type="tel" autocomplete="tel" label="Новый номер телефона" placeholder="+7 999 123-45-67" />
+        <q-btn outline color="primary" no-caps :label="profileCooldown ? `Повторить через ${profileCooldown} с` : 'Запросить код'" :loading="busy" :disable="profileCooldown > 0 || !profilePhone" @click="requestProfileCode" />
+        <template v-if="profileCodeRequested">
+          <q-input v-model="profileCode" outlined inputmode="numeric" maxlength="6" autocomplete="one-time-code" label="Код подтверждения" />
+          <q-btn unelevated color="primary" no-caps label="Подтвердить телефон" :loading="busy" :disable="!profileCode" @click="submitProfileCode" />
+        </template>
         <p v-if="auth.isStaff" class="q-my-none text-weight-medium">Профиль сотрудника</p>
 
         <q-separator />
@@ -88,8 +108,36 @@
         <q-btn flat no-caps label="Выйти" @click="logout" />
       </q-card-section>
 
-      <q-card-section v-if="error || notice">
+      <q-card-section v-if="(error || notice) && (!auth.authenticated || activeSection === 'profile' || verificationToken)">
         <q-banner :class="error ? 'bg-red-1 text-negative' : 'bg-blue-1'">{{ error || notice }}</q-banner>
+      </q-card-section>
+    </q-card>
+    <q-card v-if="auth.authenticated && activeSection === 'bookings' && !verificationToken" class="q-mx-auto q-mt-lg" :style="{ maxWidth: '520px' }">
+      <q-card-section>
+        <div class="text-h6">Мои записи</div>
+        <p v-if="auth.phones.length" class="text-caption text-grey-7 q-mb-none">Показаны записи по подтверждённым номерам: {{ auth.phones.join(', ') }}</p>
+        <p v-else class="text-caption text-grey-7 q-mb-none">Подтвердите телефон в профиле, чтобы увидеть записи, оформленные на него.</p>
+        <q-btn
+          unelevated no-caps color="primary" class="q-mt-md"
+          label="Записаться в YCLIENTS"
+          :href="YCLIENTS_NETWORK_BOOKING_URL" target="_blank" rel="noopener noreferrer"
+        />
+      </q-card-section>
+      <q-card-section v-if="historyError" class="text-negative">{{ historyError }}</q-card-section>
+      <q-card-section v-for="period in periods" :key="period">
+        <div class="text-subtitle1 text-weight-medium q-mb-sm">{{ period === 'future' ? 'Будущие записи и заявки' : 'Прошлые записи и заявки' }}</div>
+        <q-linear-progress v-if="historyBusy && history[period].length === 0" indeterminate color="primary" />
+        <p v-else-if="history[period].length === 0" class="text-grey-7 q-my-none">Записей нет.</p>
+        <q-list v-else separator>
+          <q-item v-for="booking in history[period]" :key="booking.id" class="q-px-none">
+            <q-item-section>
+              <q-item-label>{{ booking.salon }} · {{ formatBookingDate(booking.start_datetime || booking.requested_start) }}</q-item-label>
+              <q-item-label caption>{{ booking.services || 'Услуга не указана' }}<span v-if="booking.master"> · {{ booking.master }}</span></q-item-label>
+              <q-item-label caption>{{ bookingStatus(booking.status) }}</q-item-label>
+            </q-item-section>
+          </q-item>
+        </q-list>
+        <q-btn v-if="historyNext[period]" flat no-caps color="primary" label="Показать ещё" :loading="historyBusy" @click="loadBookings(period)" />
       </q-card-section>
     </q-card>
   </q-page>
@@ -99,16 +147,26 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '@/api/client';
-import { changeAuthPassword, loginWithEmail, loginWithPassword, requestAuthCode, requestEmailVerification, setAuthPassword, verifyAuthCode, verifyEmail } from '@/api/endpoints';
+import { YCLIENTS_NETWORK_BOOKING_URL } from '@/utils/yclientsBooking';
+import { changeAuthPassword, fetchMyBookings, loginWithEmail, loginWithPassword, requestAuthCode, requestEmailVerification, setAuthPassword, verifyAuthCode, verifyEmail, verifyProfilePhone, type MyBooking } from '@/api/endpoints';
 import { useAuthStore } from '@/stores/auth';
 import { browserPushPermission, disableBrowserPush, enableBrowserPush, type BrowserPushPermission } from '@/push';
 
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
-const verificationToken = computed(() => new URLSearchParams(route.hash.slice(1)).get('verify_email') || '');
+const verificationToken = computed(() => {
+  const token = route.query.verify_email;
+  return typeof token === 'string' ? token : new URLSearchParams(route.hash.slice(1)).get('verify_email') || '';
+});
+const activeSection = ref<'profile' | 'bookings'>('bookings');
 const loginMode = ref<'phone' | 'email'>('phone');
 const phone = ref('');
+const profilePhone = ref('');
+const profileCode = ref('');
+const profileCodeRequested = ref(false);
+const profileCooldown = ref(0);
+const periods = ['future', 'past'] as const;
 const email = ref('');
 const profileEmail = ref('');
 const emailChangePassword = ref('');
@@ -121,6 +179,11 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const cooldown = ref(0);
+const history = ref<{ future: MyBooking[]; past: MyBooking[] }>({ future: [], past: [] });
+const historyNext = ref<{ future: number | null; past: number | null }>({ future: 1, past: 1 });
+const historyBusy = ref(false);
+const historyError = ref('');
+let historyVersion = 0;
 const showChange = ref(false);
 const pushBusy = ref(false);
 const pushPermission = ref<BrowserPushPermission>('unsupported');
@@ -132,10 +195,16 @@ let timer: ReturnType<typeof setInterval> | undefined;
 watch(() => [auth.email, auth.pendingEmail], ([verified, pending]) => {
   profileEmail.value = pending || verified || '';
 });
+watch(() => [auth.authenticated, ...auth.phones], ([authenticated]) => {
+  reloadBookings(Boolean(authenticated));
+}, { immediate: true });
 onMounted(() => {
   void auth.restore();
   pushPermission.value = browserPushPermission();
-  timer = setInterval(() => { if (cooldown.value > 0) cooldown.value -= 1; }, 1000);
+  timer = setInterval(() => {
+    if (cooldown.value > 0) cooldown.value -= 1;
+    if (profileCooldown.value > 0) profileCooldown.value -= 1;
+  }, 1000);
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
 
@@ -146,7 +215,10 @@ function resetForm() {
 }
 function showError(cause: unknown) {
   error.value = cause instanceof ApiError || cause instanceof Error ? cause.message : 'Не удалось выполнить запрос.';
-  if (cause instanceof ApiError && cause.status === 429) cooldown.value = cause.retryAfter || 60;
+  if (cause instanceof ApiError && cause.status === 429) {
+    cooldown.value = cause.retryAfter || 60;
+    profileCooldown.value = cause.retryAfter || 60;
+  }
 }
 async function perform(action: () => Promise<void>) {
   if (busy.value) return;
@@ -160,6 +232,59 @@ function requestCode() {
     cooldown.value = 60;
     notice.value = 'Код запрошен. В режиме разработки он доступен в журнале сервера.';
   });
+}
+function requestProfileCode() {
+  void perform(async () => {
+    await requestAuthCode(profilePhone.value);
+    profileCodeRequested.value = true;
+    profileCooldown.value = 60;
+    notice.value = 'Код запрошен. В режиме разработки он доступен в журнале сервера.';
+  });
+}
+function submitProfileCode() {
+  void perform(async () => {
+    await verifyProfilePhone(profilePhone.value, profileCode.value);
+    profileCode.value = '';
+    profilePhone.value = '';
+    profileCodeRequested.value = false;
+    await auth.restore();
+    notice.value = 'Телефон подтверждён. Записи на этот номер доступны в профиле.';
+  });
+}
+async function loadBookings(period: 'future' | 'past') {
+  const page = historyNext.value[period];
+  if (!page || historyBusy.value) return;
+  const version = historyVersion;
+  historyBusy.value = true;
+  historyError.value = '';
+  try {
+    const result = await fetchMyBookings(period, page);
+    if (version !== historyVersion) return;
+    history.value[period].push(...result.results);
+    historyNext.value[period] = result.next ? page + 1 : null;
+  } catch (cause) {
+    if (version === historyVersion) historyError.value = cause instanceof ApiError ? cause.message : 'Не удалось загрузить записи.';
+  } finally {
+    if (version === historyVersion) historyBusy.value = false;
+  }
+}
+async function refreshBookings() {
+  await loadBookings('future');
+  await loadBookings('past');
+}
+function reloadBookings(authenticated = auth.authenticated) {
+  historyVersion += 1;
+  history.value = { future: [], past: [] };
+  historyNext.value = { future: 1, past: 1 };
+  historyBusy.value = false;
+  historyError.value = '';
+  if (authenticated && typeof window !== 'undefined') void refreshBookings();
+}
+function bookingStatus(status: MyBooking['status']) {
+  return ({ pending: 'Ожидает подтверждения', confirmed: 'Подтверждена', cancelled: 'Отменена', completed: 'Завершена', no_show: 'Не состоялась' })[status];
+}
+function formatBookingDate(value: string | null) {
+  return value ? new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : 'время уточняется';
 }
 function submitCode() {
   void perform(async () => {

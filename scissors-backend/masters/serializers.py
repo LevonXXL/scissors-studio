@@ -21,20 +21,20 @@ class MasterSalonSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MasterSalon
-        fields = ('id', 'name', 'yclients_staff_id')
+        fields = ('id', 'name', 'yclients_staff_id', 'yclients_booking_url')
 
 
 class MasterSerializer(serializers.ModelSerializer):
     salon_details = MasterSalonSerializer(source='master_salons', many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    price_level_display = serializers.CharField(source='get_price_level_display', read_only=True)
     photo = FilerImageUrlField(read_only=True)
 
     class Meta:
         model = Master
         fields = (
-            'id', 'slug', 'name', 'specialization',
-            'category_display', 'photo', 'bio', 'salon_details', 'status_display'
+            'id', 'slug', 'name', 'price_level_display',
+            'photo', 'bio', 'salon_details', 'status_display'
         )
 
 
@@ -43,6 +43,7 @@ class MasterViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Master.objects.filter(
         is_active=True,
         yclients_user_id__isnull=False,
+        is_booking_placeholder=False,
     ).prefetch_related('master_salons__salon')
     serializer_class = MasterSerializer
     lookup_field = 'slug'

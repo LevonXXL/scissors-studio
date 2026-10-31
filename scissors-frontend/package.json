@@ -1,7 +1,7 @@
 {
-  "name": "scissors-studio-frontend",
+  "name": "Scissors",
   "version": "0.0.1",
-  "description": "Scissors Studio Frontend",
+  "description": "Scissors Studio",
   "productName": "Scissors Studio",
   "author": "Scissors Studio",
   "type": "module",

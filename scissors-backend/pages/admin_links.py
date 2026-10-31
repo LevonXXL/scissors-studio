@@ -76,7 +76,7 @@ def linked_parent(page_id):
     if model is Salon:
         return root_page('salons')
     if model is ServiceCategory:
-        return root_page('services')
+        return root_page('uslugi')
     service = Service.objects.select_related('category__page').get(pk=owner_id)
     if service.category.page_id is None:
         raise ValidationError('Сначала привяжите страницу к категории услуг.')

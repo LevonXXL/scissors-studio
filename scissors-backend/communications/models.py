@@ -4,7 +4,7 @@ from django.db import models
 
 class FeedbackRequest(models.Model):
     name = models.CharField('Имя', max_length=100)
-    phone = models.CharField('Телефон', max_length=12)
+    phone = models.CharField('Телефон или email', max_length=254)
     message = models.TextField('Вопрос')
     created_at = models.DateTimeField('Создано', auto_now_add=True)
     user = models.ForeignKey(

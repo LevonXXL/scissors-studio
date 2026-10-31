@@ -1,8 +1,9 @@
-.PHONY: migrate shell runserver sync test superuser check
+.DEFAULT_GOAL := help
+.PHONY: migrate-local runserver sync sync-one test superuser check-local seed
 
 manage = python manage.py
 
-migrate:
+migrate-local:
 	$(manage) migrate
 
 runserver:
@@ -20,7 +21,7 @@ test:
 superuser:
 	$(manage) createsuperuser
 
-check:
+check-local:
 	$(manage) check
 
 seed:
@@ -165,6 +166,10 @@ help:
 	@echo "  check          - Проверка настроек Django (manage.py check)"
 	@echo "  migrate        - Применение миграций"
 	@echo "  collectstatic  - Сбор статических файлов"
+	@echo ""
+	@echo "Django локально:"
+	@echo "  check-local    - Проверка настроек Django"
+	@echo "  migrate-local  - Применение локальных миграций"
 	@echo ""
 	@echo "Сервис (systemd):"
 	@echo "  restart        - Перезапустить systemd-сервис"

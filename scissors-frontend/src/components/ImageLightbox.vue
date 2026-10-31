@@ -7,7 +7,7 @@
       </div>
       <div class="lightbox-stage col row items-center justify-center no-wrap">
         <q-btn v-if="images.length > 1" flat round icon="chevron_left" aria-label="Предыдущее фото" @click="move(-1)" />
-        <img v-if="currentImage" :src="currentImage.src" :alt="currentImage.alt || ''" class="lightbox-image col" />
+        <img v-if="modelValue && currentImage" :src="currentImage.src" :alt="currentImage.alt || ''" class="lightbox-image col" />
         <q-btn v-if="images.length > 1" flat round icon="chevron_right" aria-label="Следующее фото" @click="move(1)" />
       </div>
     </q-card>

@@ -12,7 +12,7 @@ from .models import FeedbackRequest
 
 class FeedbackRequestSerializer(serializers.ModelSerializer):
     name = serializers.CharField(max_length=100, min_length=2, trim_whitespace=True)
-    phone = serializers.CharField(max_length=32, trim_whitespace=True)
+    phone = serializers.CharField(max_length=254, trim_whitespace=True)
     message = serializers.CharField(max_length=4000, min_length=2, trim_whitespace=True)
 
     class Meta:
@@ -21,6 +21,8 @@ class FeedbackRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
     def validate_phone(self, value):
+        if '@' in value:
+            return serializers.EmailField(max_length=254).run_validation(value)
         try:
             return normalize_phone(value)
         except DjangoValidationError as exc:

@@ -1,0 +1,6 @@
+{% load unfold %}
+{% url 'admin:services_servicecategory_import_excel' as import_url %}
+{% component "unfold/components/button.html" with href=import_url variant="primary" %}
+  <span class="material-symbols-outlined md-18" aria-hidden="true">table_view</span>
+  Импорт Excel-прайса
+{% endcomponent %}

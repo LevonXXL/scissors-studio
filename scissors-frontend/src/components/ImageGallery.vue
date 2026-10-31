@@ -20,8 +20,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ImageLightbox from '@/components/ImageLightbox.vue';
-import { getThumbnailUrl } from '@/utils/thumbnailUrl';
-import { MEDIA_URL } from '@/config/urls';
+import { mediaImageUrl, mediaPreviewUrl } from '@/config/urls';
 
 export interface GalleryImage { id: number | string; src: string; alt: string }
 
@@ -29,7 +28,7 @@ const props = withDefaults(defineProps<{
   images: GalleryImage[];
   previewWidth?: number;
   ratio?: number;
-}>(), { previewWidth: 800, ratio: 1.5 });
+}>(), { previewWidth: 400, ratio: 1.5 });
 
 const failedPreviews = ref(new Set<string>());
 const scrollContainer = ref<HTMLElement | null>(null);
@@ -37,12 +36,12 @@ const isAtStart = ref(true);
 const isAtEnd = ref(false);
 const lightboxOpen = ref(false);
 const selectedIndex = ref(0);
-const originals = computed(() => props.images.map((image) => ({ src: image.src, alt: image.alt })));
+const originals = computed(() => props.images.map((image) => ({ src: mediaImageUrl(image.src), alt: image.alt })));
 
 function previewSource(image: GalleryImage) {
   return failedPreviews.value.has(image.src)
-    ? image.src
-    : getThumbnailUrl(image.src, props.previewWidth, MEDIA_URL);
+    ? mediaImageUrl(image.src)
+    : mediaPreviewUrl(image.src, props.previewWidth);
 }
 
 function open(index: number) {

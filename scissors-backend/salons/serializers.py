@@ -33,7 +33,7 @@ class SalonSerializer(serializers.ModelSerializer):
         model = Salon
         fields = (
             'id', 'slug', 'page', 'name', 'address', 'latitude', 'longitude', 'coordinates',
-            'phone', 'working_hours', 'description', 'logo', 'photos', 'position',
+            'phone', 'working_hours', 'description', 'logo', 'photos', 'position', 'yclients_booking_url',
         )
 
 

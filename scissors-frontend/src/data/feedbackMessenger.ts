@@ -16,7 +16,7 @@ export function formatFeedbackMessage(draft: FeedbackDraft): string {
   if (name || phone) {
     lines.push('');
     if (name) lines.push(`Имя: ${name}`);
-    if (phone) lines.push(`Телефон: ${phone}`);
+    if (phone) lines.push(`${phone.includes('@') ? 'Email' : 'Телефон'}: ${phone}`);
   }
   lines.push('', 'Сообщение:', message);
   return lines.join('\n');

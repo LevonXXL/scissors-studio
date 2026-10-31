@@ -15,7 +15,7 @@ from services.models import Service, ServiceCategory
 
 
 SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9'
-DEFAULT_OUTPUT = settings.BASE_DIR.parent / 'scissors-frontend' / 'public' / 'sitemap.xml'
+DEFAULT_OUTPUT = settings.BASE_DIR.parent / 'scissors-backend' / 'staticfiles' / 'sitemap.xml'
 
 
 def public_paths():
@@ -24,25 +24,26 @@ def public_paths():
         Salon.objects.filter(is_active=False, page__isnull=False).values_list('page_id', flat=True)
     )
     excluded_page_ids.update(
-        Master.objects.filter(Q(is_active=False) | Q(yclients_user_id__isnull=True))
+        Master.objects.filter(Q(is_active=False) | Q(yclients_user_id__isnull=True) |
+                              Q(is_booking_placeholder=True))
         .filter(page__isnull=False).values_list('page_id', flat=True)
     )
     excluded_page_ids.update(
-        ServiceCategory.objects.filter(Q(is_active=False) | Q(salon__is_active=False))
+        ServiceCategory.objects.filter(is_active=False)
         .filter(page__isnull=False).values_list('page_id', flat=True)
     )
     excluded_page_ids.update(
         Service.objects.filter(
-            Q(is_active=False) | Q(category__is_active=False) | Q(category__salon__is_active=False)
+            Q(is_active=False) | Q(category__is_active=False)
         ).filter(page__isnull=False).values_list('page_id', flat=True)
     )
 
     # Home and price list have dedicated routes even if their Page records are absent.
-    paths = {'', 'price-list'}
+    paths = {'', 'uslugi'}
     for page_id, path in Page.objects.filter(is_published=True).values_list('id', 'url_path'):
         if page_id not in excluded_page_ids and path not in {
             'login', 'policy', 'moscow', 'zelenograd', 'vacancy',
-        }:
+        } and not (path == 'services' or path.startswith('services/')):
             paths.add(path)
 
     # SalonPage is a dedicated route and remains available without a Page record.

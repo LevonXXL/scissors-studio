@@ -33,7 +33,7 @@ export default defineSsrMiddleware(({ app, resolve, render, serve }) => {
     res.setHeader("Content-Type", "text/html");
 
     try {
-      const renderedHtml = await render({ req, res });
+      const renderedHtml = await render({ req, res, nonce: res.locals.cspNonce });
       res.send(renderedHtml);
     } catch (err) {
       if (isRouteNotFoundError(err)) {
@@ -62,6 +62,8 @@ export default defineSsrMiddleware(({ app, resolve, render, serve }) => {
          *
          * Note that serve.devError is available on dev only
          */
+        console.error('SSR ORIGINAL ERROR:', err)
+        console.error('SSR ORIGINAL STACK:', err?.stack)
         const { errorHeaders, errorHtml } = serve.devError({ err, req });
         res.set(errorHeaders).status(500).send(errorHtml);
         return;

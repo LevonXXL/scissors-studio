@@ -11,35 +11,44 @@ const emit = defineEmits<{ unavailable: [] }>();
 const mapEl = ref<HTMLElement | null>(null);
 
 // Ymaps API грузится динамически, только на клиенте — на сервере window нет,
-// поэтому весь этот компонент должен рендериться внутри <q-no-ssr> (см. SalonsPage.vue).
-interface YMapInstance {
-  addChild: (child: unknown) => void;
-}
-
+// поэтому весь этот компонент должен рендериться внутри <q-no-ssr> (см. SalonPage.vue).
 declare global {
   interface Window {
-    ymaps3?: {
-      ready: Promise<void>;
-      YMap: new (element: HTMLElement, opts: Record<string, unknown>) => YMapInstance;
-      YMapDefaultSchemeLayer: new (opts?: Record<string, unknown>) => unknown;
-      YMapDefaultFeaturesLayer: new (opts?: Record<string, unknown>) => unknown;
-      YMapMarker: new (opts: Record<string, unknown>, element: HTMLElement) => unknown;
+    ymaps?: {
+      ready: () => PromiseLike<unknown>;
+      Map: new (element: HTMLElement, opts: { center: number[]; zoom: number }) => {
+        geoObjects: { add: (object: unknown) => void };
+      };
+      Placemark: new (coordinates: number[], properties: { hintContent: string }) => unknown;
     };
   }
 }
 
-function loadYmapsScript(apiKey: string): Promise<void> {
-  if (window.ymaps3) return window.ymaps3.ready;
+let mapsReady: Promise<void> | null = null;
 
-  return new Promise((resolve, reject) => {
+function loadYmapsScript(apiKey: string): Promise<void> {
+  if (window.ymaps) return Promise.resolve(window.ymaps.ready()).then(() => undefined);
+  if (mapsReady) return mapsReady;
+
+  const promise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`;
+    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&csp=true`;
     script.onload = () => {
-      window.ymaps3!.ready.then(resolve).catch(reject);
+      if (!window.ymaps) {
+        reject(new Error('Yandex Maps API did not initialize'));
+        return;
+      }
+      Promise.resolve(window.ymaps.ready()).then(() => resolve(), reject);
     };
-    script.onerror = reject;
+    script.onerror = () => reject(new Error('Yandex Maps API script failed to load'));
     document.head.appendChild(script);
   });
+  const ready = promise.catch((error: unknown) => {
+    mapsReady = null;
+    throw error;
+  });
+  mapsReady = ready;
+  return ready;
 }
 
 onMounted(async () => {
@@ -53,27 +62,17 @@ onMounted(async () => {
 
   try {
     await loadYmapsScript(apiKey);
+    const ymaps = window.ymaps!;
+    const map = new ymaps.Map(mapEl.value, {
+      center: props.salons[0]!.coordinates,
+      zoom: props.zoom,
+    });
+
+    for (const salon of props.salons) {
+      map.geoObjects.add(new ymaps.Placemark(salon.coordinates, { hintContent: salon.name }));
+    }
   } catch {
     emit('unavailable');
-    return;
-  }
-  const ymaps3 = window.ymaps3!;
-
-  const [firstLat, firstLon] = props.salons[0]!.coordinates;
-
-  const map = new ymaps3.YMap(mapEl.value, {
-    location: { center: [firstLon, firstLat], zoom: props.zoom },
-  });
-  map.addChild(new ymaps3.YMapDefaultSchemeLayer());
-  map.addChild(new ymaps3.YMapDefaultFeaturesLayer());
-
-  for (const salon of props.salons) {
-    const [lat, lon] = salon.coordinates;
-    const markerEl = document.createElement('div');
-    markerEl.title = salon.name;
-    markerEl.style.cssText =
-      'width:16px;height:16px;border-radius:50%;background:#8c2b12;border:2px solid #fff';
-    map.addChild(new ymaps3.YMapMarker({ coordinates: [lon, lat] }, markerEl));
   }
 });
 </script>

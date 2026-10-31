@@ -1,6 +1,6 @@
 <template>
   <aside v-if="visible" class="install-banner site-page" aria-label="Установка приложения">
-    <div class="install-banner__mark"><img src="/logo/scissors-512x512.png" alt="" /></div>
+    <div class="install-banner__mark"><img :src="publicAssetUrl('/logo/scissors-512x512.png')" alt="" /></div>
     <div class="install-banner__copy">
       <div class="text-overline">SCISSORS STUDIO В ВАШЕМ ТЕЛЕФОНЕ</div>
       <div class="text-h6 text-weight-bold">Установите приложение</div>
@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
+import { publicAssetUrl } from '@/config/urls';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -52,18 +53,38 @@ async function install() {
   if (choice.outcome === 'accepted') visible.value = false;
 }
 
+// onMounted(() => {
+//   const standalone = window.matchMedia('(display-mode: standalone)').matches ||
+//     ('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+//   isIos.value = /iPad|iPhone|iPod/.test(navigator.userAgent);
+//   visible.value = !standalone && window.sessionStorage.getItem('install-banner-dismissed') !== '1';
+//   window.addEventListener('beforeinstallprompt', onBeforeInstall);
+//   window.addEventListener('appinstalled', onInstalled);
+// });
+// onUnmounted(() => {
+//   window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+//   window.removeEventListener('appinstalled', onInstalled);
+// });
+
+
 onMounted(() => {
-  const standalone = window.matchMedia('(display-mode: standalone)').matches ||
-    ('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    ('standalone' in navigator &&
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+
   isIos.value = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  visible.value = !standalone && window.sessionStorage.getItem('install-banner-dismissed') !== '1';
+
+  visible.value =
+    !standalone &&
+    window.sessionStorage.getItem('install-banner-dismissed') !== '1';
+
   window.addEventListener('beforeinstallprompt', onBeforeInstall);
   window.addEventListener('appinstalled', onInstalled);
 });
-onUnmounted(() => {
-  window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-  window.removeEventListener('appinstalled', onInstalled);
-});
+
+
 </script>
 
 <style scoped>
@@ -86,9 +107,17 @@ onUnmounted(() => {
 .install-banner__steps span { display: inline-flex; align-items: center; gap: 5px; }
 .install-banner__actions { display: flex; align-items: center; gap: 6px; align-self: flex-start; }
 @media (max-width: 600px) {
-  .install-banner { margin: 12px 12px 0; padding: 16px; gap: 12px; align-items: flex-start; }
+  .install-banner { width: calc(100% - 24px); margin: 12px auto 0; padding: 16px; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
   .install-banner__mark { flex-basis: 46px; }
   .install-banner__mark img { width: 46px; height: 46px; border-radius: 12px; }
-  .install-banner__actions { flex-direction: column-reverse; }
+  .install-banner__copy { flex-basis: calc(100% - 58px); }
+  .install-banner__actions { width: 100%; justify-content: flex-end; }
+}
+
+@media (display-mode: standalone),
+(display-mode: fullscreen) {
+  .install-banner {
+    display: none !important;
+  }
 }
 </style>

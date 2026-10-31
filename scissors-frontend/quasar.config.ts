@@ -2,17 +2,24 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app';
+import { loadEnv } from 'vite';
 
 export default defineConfig((ctx) => {
-  const siteUrl = process.env.VITE_SITE_URL || process.env.SITE_URL
-    || (ctx.dev ? 'http://localhost:9100' : 'https://scissors-studio.ru');
+  const viteEnv = loadEnv(ctx.dev ? 'development' : 'production', process.cwd(), 'VITE_');
+  const siteUrl = viteEnv.VITE_SITE_URL || process.env.SITE_URL
+    || (ctx.dev ? 'http://localhost:9100' : 'https://scissors.group');
   const apiOrigin = process.env.API_ORIGIN
-    || (ctx.dev ? 'http://localhost:8000' : 'https://api.scissors-studio.ru');
-  const apiBaseUrl = process.env.VITE_API_BASE_URL || `${apiOrigin.replace(/\/$/, '')}/api/v1`;
-  const mediaUrl = new URL(
-    process.env.VITE_MEDIA_URL || process.env.MEDIA_URL || '/media/',
-    new URL(apiBaseUrl).origin,
-  ).href;
+    || (ctx.dev ? 'http://localhost:8000' : 'https://api.studio.scissors.group');
+  const apiBaseUrl = viteEnv.VITE_API_BASE_URL || `${apiOrigin.replace(/\/$/, '')}/api/v1`;
+  // Empty STATIC_URL keeps images from public/ on the frontend's own origin.
+  const staticUrl = viteEnv.VITE_STATIC_URL || '';
+  const configuredMediaUrl = viteEnv.VITE_MEDIA_URL || '/media/';
+  const mediaBase = new URL(configuredMediaUrl, new URL(apiBaseUrl).origin);
+  // A bare CDN origin means the usual Django /media/ location.
+  const resolvedMediaUrl = mediaBase.pathname === '/' && /^https?:\/\//.test(configuredMediaUrl)
+    ? new URL('/media/', mediaBase).href
+    : mediaBase.href;
+  const mediaUrl = resolvedMediaUrl.endsWith('/') ? resolvedMediaUrl : `${resolvedMediaUrl}/`;
 
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
@@ -46,6 +53,9 @@ export default defineConfig((ctx) => {
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#build
     build: {
+      env: {
+        clientPrefix: ['QCLI_', 'VITE_'],
+      },
       target: {
         // browser: 'baseline-widely-available',
         // node: 'node22'
@@ -54,6 +64,7 @@ export default defineConfig((ctx) => {
       define: {
         'import.meta.env.VITE_SITE_URL': JSON.stringify(siteUrl.replace(/\/$/, '')),
         'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBaseUrl),
+        'import.meta.env.VITE_STATIC_URL': JSON.stringify(staticUrl),
         'import.meta.env.VITE_MEDIA_URL': JSON.stringify(mediaUrl),
       },
 
@@ -66,7 +77,7 @@ export default defineConfig((ctx) => {
       // https://v2.quasar.dev/quasar-cli-vite/page-routing-with-vue-router#filename-based-routing
       // filenameBasedRouting: true,
 
-      vueRouterMode: 'hash', // available values: 'hash', 'history'
+      vueRouterMode: 'history', // прямые адреса работают в SSR и PWA
       // vueRouterBase,
       // vueDevtools,
 
@@ -96,7 +107,7 @@ export default defineConfig((ctx) => {
       config: {},
 
       // iconSet: 'material-icons', // Quasar icon set
-      // lang: 'en-US', // Quasar language pack
+      lang: 'ru', // Quasar language pack
 
       // For special cases outside of where the auto-import strategy can have an impact
       // (like functional components as one of the examples),
@@ -233,7 +244,7 @@ export default defineConfig((ctx) => {
       builder: {
         // https://www.electron.build/configuration
 
-        appId: 'scissors-studio-frontend'
+        appId: 'Scissors'
       }
     },
 

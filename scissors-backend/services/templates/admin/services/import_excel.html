@@ -1,0 +1,105 @@
+{% extends "admin/base_site.html" %}
+{% load static unfold %}
+{% block content %}
+<style>
+  .excel-upload-form { display: grid; gap: 18px; max-width: 760px; margin: 20px 0 32px; }
+  .excel-upload-area { padding: 24px; border: 2px dashed #a9b4c3; border-radius: 12px; background: #f8fafc; transition: border-color .15s, background-color .15s; }
+  .excel-upload-area:hover, .excel-upload-area:focus-within { border-color: #8c2b12; background: #fff8f5; }
+  .excel-upload-heading { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+  .excel-upload-heading .material-symbols-outlined { color: #8c2b12; }
+  .excel-upload-help { margin: 8px 0 16px; color: #6b7280; }
+  .excel-upload-input { display: block; width: 100%; max-width: 100%; }
+  .excel-upload-input::file-selector-button { margin-right: 14px; padding: 9px 14px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; }
+  .excel-upload-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+  .excel-salon-field { display: grid; gap: 6px; min-width: 240px; font-weight: 600; }
+  .excel-salon-field select { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; font-weight: 400; }
+  .dark .excel-upload-area { border-color: #6b7280; background: #1f2937; }
+  .dark .excel-upload-area:hover, .dark .excel-upload-area:focus-within { border-color: #cf7b61; background: #2d2524; }
+  .dark .excel-upload-input::file-selector-button, .dark .excel-salon-field select { border-color: #6b7280; background: #1f2937; color: #fff; }
+  .excel-preview-scroll { max-height: 65vh; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .excel-preview-table { width: 100%; min-width: 1100px; border-collapse: separate; border-spacing: 0; }
+  .excel-preview-table th, .excel-preview-table td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid #e5e7eb; }
+  .excel-preview-table thead th { position: sticky; top: 0; z-index: 2; }
+  .excel-preview-table ul { margin: 0; padding-left: 18px; }
+  .excel-preview-table .price-lines { list-style: none; padding: 0; }
+  .excel-preview-table .price-lines li + li { margin-top: 4px; }
+  .excel-preview-table .change-lines { margin-top: 6px; }
+  .excel-preview-table select { max-width: 240px; }
+  .excel-preview-control:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+<p>Загрузите XLSX и выберите салон. Файл будет разобран без изменения базы данных.</p>
+<form method="post" enctype="multipart/form-data" class="excel-upload-form">{% csrf_token %}
+  <div class="excel-upload-area">
+    <label for="excel-file" class="excel-upload-heading">
+      <span class="material-symbols-outlined" aria-hidden="true">upload_file</span>
+      Файл Excel (.xlsx)
+    </label>
+    <p id="excel-file-help" class="excel-upload-help">Выберите прайс для предварительного разбора. Максимальный размер — 5 МБ.</p>
+    <input id="excel-file" class="excel-upload-input" type="file" name="file" accept=".xlsx" aria-describedby="excel-file-help" required>
+  </div>
+  <div class="excel-upload-actions">
+    <label for="excel-salon" class="excel-salon-field">Салон
+      <select id="excel-salon" name="salon" required>
+        <option value="">Выберите салон</option>
+        {% for salon in salons %}<option value="{{ salon.pk }}" {% if selected_salon.pk == salon.pk %}selected{% endif %}>{{ salon.name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% component "unfold/components/button.html" with submit=1 variant="primary" %}Разобрать и показать изменения{% endcomponent %}
+  </div>
+</form>
+
+{% if preview %}
+<h2>Предпросмотр для салона «{{ selected_salon.name }}»</h2>
+<p>Название, описание и разделы услуги общие для всех салонов. Цены и доступность меняются только у выбранного салона. Назначения мастеров не меняются.</p>
+<p>Тип прайса: {{ preview.kind }}; строк услуг: {{ rows|length }}.
+  {% if preview.city %}Город в файле: {{ preview.city }}.{% endif %}</p>
+{% if city_mismatch %}<p><strong>Город в файле отличается от выбранного салона.</strong>
+  Цены отмеченных строк будут записаны только для «{{ selected_salon.name }}».</p>{% endif %}
+{% if preview.errors %}<h3>Неоднозначности и ошибки</h3><ul>
+  {% for error in preview.errors %}<li>{{ error }}</li>{% endfor %}
+</ul>{% endif %}
+{% if reviewed %}<p>Сводка изменений:</p><ul>
+  {% for action, count in changes %}<li>{{ action }}: {{ count }}</li>{% endfor %}
+</ul>{% endif %}
+
+<form method="post" id="excel-preview-form" data-reviewed="{{ reviewed|yesno:'true,false' }}">{% csrf_token %}
+  <p>Для неточного совпадения выберите существующую услугу или укажите её ID. Пустой выбор создаст новую услугу, если точного совпадения нет.</p>
+  <div class="flex flex-wrap items-center gap-3 my-3">
+    <button type="button" id="select-all-rows" class="excel-preview-control font-medium inline-flex items-center px-3 py-2 rounded-default bg-primary-600 text-white cursor-pointer">Выбрать все</button>
+    <button type="button" id="clear-selected-rows" class="excel-preview-control font-medium inline-flex items-center px-3 py-2 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent cursor-pointer" disabled>Снять выбор</button>
+    {% if not reviewed %}<span>Сначала нажмите «Обновить предпросмотр» после проверки сопоставлений.</span>{% endif %}
+  </div>
+  <div class="excel-preview-scroll">
+    <table class="excel-preview-table"><thead><tr>
+      <th class="bg-white dark:bg-base-900">Применить</th><th class="bg-white dark:bg-base-900">Строка</th><th class="bg-white dark:bg-base-900">Категория / раздел / подгруппа</th>
+      <th class="bg-white dark:bg-base-900">Услуга и описание</th><th class="bg-white dark:bg-base-900">Цены из файла</th><th class="bg-white dark:bg-base-900">Изменения</th><th class="bg-white dark:bg-base-900">Сопоставление</th>
+    </tr></thead><tbody>
+    {% for row in rows %}<tr>
+      <td><input type="checkbox" name="selected_rows" value="{{ row.row }}" {% if row.checked %}checked{% endif %} aria-label="Применить строку {{ row.row }}"></td>
+      <td>{{ row.row }}</td>
+      <td>{{ row.category_title }}<br>{{ row.group }}{% if row.subgroup %}<br>{{ row.subgroup }}{% endif %}</td>
+      <td>{{ row.title }}{% if row.description %}<br><small>{{ row.description }}</small>{% endif %}
+        {% if row.conditions %}<br><small>{{ row.conditions|linebreaksbr }}</small>{% endif %}</td>
+      <td><ul class="price-lines">{% for price in row.price_lines %}<li>{{ price.label }}: {{ price.value }}</li>{% endfor %}</ul></td>
+      <td><strong>{{ row.change }}</strong><ul class="change-lines">
+        {% for detail in row.details %}<li>{{ detail|truncatechars:300 }}</li>{% endfor %}
+      </ul></td>
+      <td><select name="match_{{ row.row }}"><option value="">Автоматически / создать</option>
+        {% for candidate in row.candidates %}<option value="{{ candidate.id }}" {% if row.matched_id == candidate.id|stringformat:'s' %}selected{% endif %}>#{{ candidate.id }} {{ candidate.title }}</option>{% endfor %}
+      </select><input type="number" name="match_id_{{ row.row }}" min="1" placeholder="Другой ID"
+        value="{{ row.manual_match_id }}" style="width:95px"></td>
+    </tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="flex flex-wrap gap-3 mt-4">
+    {% component "unfold/components/button.html" with submit=1 name="review_matches" value=1 variant="default" %}Обновить предпросмотр{% endcomponent %}
+    {% if reviewed and has_checked_rows %}
+      {% component "unfold/components/button.html" with submit=1 name="apply_selected" value=1 variant="primary" %}Применить{% endcomponent %}
+    {% else %}
+      {% component "unfold/components/button.html" with submit=1 name="apply_selected" value=1 variant="primary" attrs=disabled_button_attrs %}Применить{% endcomponent %}
+    {% endif %}
+  </div>
+</form>
+<script src="{% static 'services/js/excel_import_selection.js' %}" defer></script>
+{% endif %}
+{% endblock %}

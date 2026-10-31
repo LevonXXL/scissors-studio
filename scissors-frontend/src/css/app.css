@@ -6,11 +6,10 @@
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
 
-/* Новая палитра бренда: чёрный/белый — основные, #C5291C — акцент для
-   отдельных важных элементов (CTA, подпись "by Stets", активные состояния).
-   Не заливать акцентом весь UI — по ТЗ он для небольшого числа элементов. */
+/* Основной цвет кнопок взят из шапки и подвала старого сайта Tilda.
+   Остальные цвета текста и фона задаются отдельно. */
 :root {
-  --q-primary: #000000;
+  --q-primary: #8c2b12;
   --q-secondary: #1e1e1e;
 
   --sc-accent: #C5291C;
@@ -25,6 +24,44 @@
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--sc-text-primary);
+}
+
+/* Compact defaults for semantic headings, matching Quasar's h4–h6 and
+   subtitle scales. Explicit text-h* utility classes still take precedence. */
+h1 {
+  font-size: 2.125rem;
+  line-height: 2.5rem;
+  letter-spacing: 0.00735em;
+}
+
+h2 {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  letter-spacing: normal;
+}
+
+h3 {
+  font-size: 1.25rem;
+  line-height: 2rem;
+  letter-spacing: 0.0125em;
+}
+
+h4 {
+  font-size: 1rem;
+  line-height: 1.75rem;
+  letter-spacing: 0.00937em;
+}
+
+h5 {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  letter-spacing: 0.00714em;
+}
+
+h6 {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.01786em;
 }
 
 a {

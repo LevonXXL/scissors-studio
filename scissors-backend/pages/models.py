@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django_ckeditor_5.fields import CKEditor5Field
+from filer.fields.image import FilerImageField
 from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 
@@ -113,12 +114,12 @@ class Page(MPTTModel):
 
 
 class PagePicture(models.Model):
-    """Изображение, прикреплённое к странице. Обычный ImageField — Filer
-    здесь избыточен, галерея на несколько картинок на страницу не требует
-    медиатеки с переиспользованием файлов между страницами."""
+    """Изображение страницы; старые загрузки доступны до переноса в Filer."""
 
     page = models.ForeignKey(Page, verbose_name='Страница', related_name='pictures', on_delete=models.CASCADE)
-    image = models.ImageField('Изображение', upload_to='pages/pictures/')
+    image = FilerImageField(verbose_name='Изображение в Filer', null=True, blank=True,
+                            on_delete=models.SET_NULL, related_name='+')
+    legacy_image = models.ImageField('Прежнее изображение', upload_to='pages/pictures/', blank=True)
     alt = models.CharField('Alt-текст', max_length=255, blank=True, help_text='Для доступности и SEO.')
     position = models.PositiveIntegerField('Сортировка', default=0)
 
@@ -129,3 +130,11 @@ class PagePicture(models.Model):
 
     def __str__(self):
         return f'Изображение для «{self.page}»'
+
+    @property
+    def image_url(self):
+        if self.image_id:
+            return self.image.url
+        if self.legacy_image:
+            return self.legacy_image.url
+        return ''

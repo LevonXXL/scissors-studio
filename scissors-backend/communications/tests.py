@@ -6,10 +6,13 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 from rest_framework.test import APITestCase
+
+from masters.models import Master
 
 from .models import FeedbackRequest, PushPreference, PushSubscription
 from .push import notify_new_feedback, push_configuration_error, send_to_staff
@@ -61,6 +64,20 @@ class FeedbackPushTests(APITestCase):
         self.assertEqual(observed, [response.data['id']])
         self.assertTrue(FeedbackRequest.objects.filter(pk=response.data['id']).exists())
 
+    def test_feedback_accepts_email_as_contact(self):
+        response = self.client.post('/api/v1/feedback/', {
+            'name': 'Клиент', 'phone': 'client@example.com', 'message': 'Подскажите цену',
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(FeedbackRequest.objects.get(pk=response.data['id']).phone, 'client@example.com')
+
+    def test_feedback_rejects_invalid_contact(self):
+        response = self.client.post('/api/v1/feedback/', {
+            'name': 'Клиент', 'phone': 'client@invalid', 'message': 'Подскажите цену',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(FeedbackRequest.objects.exists())
+
     def test_only_enabled_active_staff_subscriptions_are_sent(self):
         staff, selected = self.create_subscription('staff')
         self.create_subscription('client', staff=False)
@@ -74,6 +91,29 @@ class FeedbackPushTests(APITestCase):
         sender.assert_called_once()
         self.assertEqual(sender.call_args.kwargs['subscription_info']['endpoint'], selected.endpoint)
         self.assertEqual(selected.user_id, staff.pk)
+
+    def test_feedback_push_requires_view_permission(self):
+        master_user, master_subscription = self.create_subscription('master')
+        Master.objects.create(name='Мастер', user=master_user)
+        _, technical_subscription = self.create_subscription('technical')
+        self.create_subscription('staff-without-permission')
+        permission = Permission.objects.get(content_type__app_label='communications',
+                                            codename='view_feedbackrequest')
+        group = Group.objects.create(name='Просмотр обращений')
+        group.permissions.add(permission)
+        master_user.groups.add(group)
+        technical_subscription.user.user_permissions.add(permission)
+        sender = Mock(return_value=SimpleNamespace(status_code=201))
+        feedback = FeedbackRequest.objects.create(
+            name='Клиент', phone='+79991234567', message='Перезвоните мне',
+        )
+
+        with fake_pywebpush(sender):
+            notify_new_feedback(feedback)
+
+        self.assertEqual(sender.call_count, 2)
+        endpoints = {call.kwargs['subscription_info']['endpoint'] for call in sender.call_args_list}
+        self.assertEqual(endpoints, {master_subscription.endpoint, technical_subscription.endpoint})
 
     def test_subscription_api_saves_to_current_user_and_disabling_removes_it(self):
         staff = get_user_model().objects.create_user(

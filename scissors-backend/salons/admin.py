@@ -57,7 +57,7 @@ class SalonAdmin(admin.ModelAdmin):
                 'Заполняются автоматически при синхронизации с YCLIENTS.'
             ),
         }),
-        ('Интеграция с YCLIENTS', {'fields': ('yclients_company_id', 'last_synced_at')}),
+        ('Интеграция с YCLIENTS', {'fields': ('yclients_company_id', 'yclients_booking_url', 'last_synced_at')}),
         ('Интеграция с REWIO', {'fields': ('yandex_maps_url', 'twogis_url', 'zoon_url', 'rewio_object_id')}),
     )
 

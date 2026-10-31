@@ -84,19 +84,14 @@
           </div>
 
           <q-card-section>
-            <!-- Категория -->
-            <div class="text-caption text-weight-bold text-primary q-mb-xs" style="text-transform: uppercase;">
-              {{ master.category_display }}
+            <!-- Подтверждённый уровень прайса -->
+            <div v-if="master.price_level_display" class="text-caption text-weight-bold text-primary q-mb-xs" style="text-transform: uppercase;">
+              {{ master.price_level_display }}
             </div>
 
             <!-- Имя -->
             <div class="text-h6 text-weight-bold q-mb-sm">
               {{ master.name }}
-            </div>
-
-            <!-- Специализация -->
-            <div v-if="master.specialization" class="text-body2 text-grey-7 q-mb-xs">
-              {{ master.specialization }}
             </div>
 
             <!-- Описание -->
@@ -124,6 +119,10 @@
                 color="primary"
                 :to="`/team/${master.slug}`"
             />
+            <q-btn v-for="link in bookingLinks(master)" :key="link.salonId"
+                unelevated no-caps color="primary"
+                :label="bookingLinks(master).length === 1 ? 'Записаться' : `Записаться — ${link.salonName}`"
+                :href="link.url" target="_blank" rel="noopener noreferrer" />
           </q-card-actions>
         </q-card>
       </div>
@@ -135,20 +134,6 @@
       <div class="text-h6 text-grey-7 q-mt-md">В этом салоне пока нет мастеров</div>
     </div>
 
-    <!-- CTA: Стать частью команды -->
-    <div class="text-center q-mt-xl q-pa-xl bg-primary text-white rounded-borders">
-      <div class="text-h6 text-weight-bold q-mb-sm">Хочу в команду</div>
-      <p class="text-body2 q-mb-md">Оставьте заявку, ваш бьюти-ассистент свяжется с вами</p>
-      <q-btn
-          unelevated
-          no-caps
-          label="Стать частью команды"
-          color="white"
-          text-color="primary"
-          @click="openVacancyForm"
-      />
-    </div>
-
   </q-page>
 </template>
 
@@ -157,8 +142,9 @@ import { ref, computed, onServerPrefetch } from 'vue';
 import { useMeta } from 'quasar';
 import { useTeamStore } from '@/stores/team';
 import { usePagesStore } from '@/stores/pages-store';
-import { getThumbnailUrl } from '@/utils/thumbnailUrl';
-import { MEDIA_URL } from '@/config/urls';
+import { mediaImageUrl, mediaPreviewUrl } from '@/config/urls';
+import type { Master } from '@/api/types';
+import { salonBookingUrl } from '@/utils/yclientsBooking';
 
 const teamStore = useTeamStore();
 const pagesStore = usePagesStore();
@@ -166,7 +152,7 @@ const teamPage = computed(() => pagesStore.byPath.team ?? null);
 const failedPreviews = ref(new Set<number>());
 
 function masterPhotoSource(id: number, photo: string): string {
-  return failedPreviews.value.has(id) ? photo : getThumbnailUrl(photo, 600, MEDIA_URL);
+  return failedPreviews.value.has(id) ? mediaImageUrl(photo) : mediaPreviewUrl(photo, 600);
 }
 
 // Запускаем загрузку один раз сразу (работает и на сервере, и на клиенте).
@@ -188,6 +174,18 @@ const filteredMasters = computed(() => {
       m.salon_details.some(s => s.id === selectedSalonId.value),
   );
 });
+
+function bookingLinks(master: Master) {
+  return master.salon_details
+    .filter((link) => !selectedSalonId.value || link.id === selectedSalonId.value)
+    .map((link) => ({
+      salonId: link.id,
+      salonName: link.name,
+      url: link.yclients_booking_url || salonBookingUrl(
+        teamStore.salons.find((salon) => salon.id === link.id),
+      ),
+    }));
+}
 
 useMeta(() => ({
   title: teamPage.value?.title_tag || 'Команда и портфолио — Scissors Studio',

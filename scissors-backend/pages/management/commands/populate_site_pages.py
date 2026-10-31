@@ -13,13 +13,11 @@ from salons.models import Salon
 from services.models import Service, ServiceCategory
 
 
-HOME_CONTENT = '''
-<div class="text-overline text-primary text-weight-bold">ПРОСТРАНСТВО НЕЗАВИСИМЫХ МАСТЕРОВ SCISSORS STUDIO</div>
-<h1 class="text-h3 text-weight-bold q-mt-sm">Стратегический подход к вашему образу</h1>
-<p class="text-body1 q-mt-md text-grey-8">У нас можно полностью довериться профессионалам: персональная бьюти-стратегия,
-современный подход и точность исполнения гарантируют естественный, уверенный
-и безупречный результат.</p>
-'''.strip()
+HOME_CONTENT = (
+    'У нас можно полностью довериться профессионалам: персональная бьюти-стратегия, '
+    'современный подход и точность исполнения гарантируют естественный, уверенный '
+    'и безупречный результат.'
+)
 
 TEAM_CONTENT = '''
 <p>Категория мастера отражает его опыт, уровень самостоятельности и глубину работы с образом.
@@ -49,11 +47,7 @@ PRIVACY_CONTENT = (Path(__file__).resolve().parents[2] / 'content' / 'privacy_po
     encoding='utf-8',
 ).strip()
 
-SERVICES_CONTENT = '''
-<p>Стоимость услуг состоит из сервисного обслуживания и услуги мастера.
-Категорию мастера смотрите в его карточке — цена зависит от уровня
-выбранного специалиста (Универсал/Модельер, Топ-стилист, Арт-директор).</p>
-'''.strip()
+SERVICES_CONTENT = '<p>Услуги и цены Scissors Studio. Выберите салон и направление.</p>'
 
 ABOUT_CONTENT = '''
 <p>Привет! Я Михаил Стець, владелец, идейный вдохновитель и арт-директор сети
@@ -263,8 +257,8 @@ class Command(BaseCommand):
             return
 
         upsert_page(
-            path='', slug='', parent=None, title='Главная', content=HOME_CONTENT,
-            meta_title='Scissors Studio — пространство независимых мастеров',
+            path='', slug='', parent=None, title='Стратегический подход к вашему образу', content=HOME_CONTENT,
+            meta_title='Стратегический подход к вашему образу — Scissors Studio',
             meta_description=(
                 'Scissors Studio — пространство независимых мастеров-партнёров. '
                 'Стратегический подход к вашему образу в Москве и Зеленограде.'
@@ -283,10 +277,11 @@ class Command(BaseCommand):
         )
         populate_privacy_page()
         services_root = upsert_page(
-            path='services', slug='services', parent=None,
+            path='uslugi', slug='uslugi', parent=None,
             title='Услуги и цены', content=SERVICES_CONTENT,
-            meta_title='Прайс — Scissors Studio',
+            meta_title='Услуги и цены — Scissors Studio',
             legacy_titles=('Услуги и цены',),
+            overwrite_content=False, overwrite_title=False,
         )
         salons_root = upsert_page(
             path='salons', slug='salons', parent=None,
@@ -307,7 +302,8 @@ class Command(BaseCommand):
             salons_added += salon_page(salon, salons_root)
 
         masters_added = 0
-        for master in Master.objects.filter(is_active=True, is_system=False).exclude(slug=''):
+        for master in Master.objects.filter(is_active=True, is_system=False,
+                                             is_booking_placeholder=False).exclude(slug=''):
             path = f'team/{master.slug}'
             page = master.page or Page.objects.filter(url_path=path).first() or Page.objects.filter(
                 parent=team, url=master.slug,
@@ -318,14 +314,12 @@ class Command(BaseCommand):
             if page is None:
                 page = Page(
                     title=master.name, url=master.slug, parent=team,
-                    content=format_html('<p>{}</p>', master.bio) if master.bio else '',
+                    content='',
                 )
                 masters_added += 1
             else:
                 page.parent = team
                 page.url = master.slug
-                if not page.content and master.bio:
-                    page.content = format_html('<p>{}</p>', master.bio)
             if before is None or before[:3] != (page.parent_id, page.url, page.content) or page.url_path != path:
                 page.save()
             if master.page_id != page.pk:
@@ -333,11 +327,11 @@ class Command(BaseCommand):
                 master.save(update_fields=['page'])
 
         categories_added = 0
-        for category in ServiceCategory.objects.select_related('page').order_by('pk'):
+        for category in ServiceCategory.objects.filter(is_active=True).select_related('page').order_by('pk'):
             categories_added += category_page(category, services_root)
 
         services_added = 0
-        for service in Service.objects.select_related('page', 'category__page').order_by('pk'):
+        for service in Service.objects.filter(is_active=True, category__is_active=True).select_related('page', 'category__page').order_by('pk'):
             services_added += service_page(service)
 
         self.stdout.write(self.style.SUCCESS(

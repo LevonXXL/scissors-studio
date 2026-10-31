@@ -29,6 +29,9 @@ export interface PageDetail {
   url_path: string;
   parent: number | null;
   pictures: PagePicture[];
+  master: Pick<Master, 'name' | 'photo' | 'bio'> | null;
+  booking_target?: { salon?: string; service?: number; master?: number } | null;
+  yclients_booking_links: { salon_id: number; salon_name: string; url: string }[];
 }
 
 export interface SalonPhoto {
@@ -52,19 +55,20 @@ export interface Salon {
   logo: string | null;
   photos: SalonPhoto[];
   position: number;
+  yclients_booking_url: string;
 }
 
 export interface SalonBrief {
   id: number;
   name: string;
+  yclients_booking_url: string;
 }
 
 export interface Master {
   id: number;
   slug: string;
   name: string;
-  specialization: string;
-  category_display: string;
+  price_level_display: string;
   photo: string | null;
   bio: string;
   salon_details: SalonBrief[];

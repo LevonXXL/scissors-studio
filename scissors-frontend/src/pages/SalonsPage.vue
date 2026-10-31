@@ -50,8 +50,7 @@ export default {
 import { computed, ref } from 'vue';
 import { useMeta } from 'quasar';
 import type { Salon } from '@/api/types';
-import { getThumbnailUrl } from '@/utils/thumbnailUrl';
-import { MEDIA_URL } from '@/config/urls';
+import { mediaImageUrl, mediaPreviewUrl } from '@/config/urls';
 
 const pagesStore = usePagesStore();
 const salonsStore = useSalonsStore();
@@ -68,12 +67,13 @@ function coverImage(salon: Salon): string | undefined {
 function coverSource(salon: Salon): string | undefined {
   const original = coverImage(salon);
   return original && !failedPreviews.value.has(salon.id)
-    ? getThumbnailUrl(original, 800, MEDIA_URL)
-    : original;
+    ? mediaPreviewUrl(original, 400)
+    : original && mediaImageUrl(original);
 }
 
 function handleImageError(salon: Salon) {
-  if (!failedPreviews.value.has(salon.id) && coverSource(salon) !== coverImage(salon)) {
+  const original = coverImage(salon);
+  if (!failedPreviews.value.has(salon.id) && original && coverSource(salon) !== mediaImageUrl(original)) {
     failedPreviews.value.add(salon.id);
   } else {
     failedImages.value.add(salon.id);

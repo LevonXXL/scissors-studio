@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load static unfold %}
+{% block content %}
+<style>
+  .price-upload { display: grid; gap: 16px; max-width: 760px; margin: 20px 0 32px; }
+  .price-upload input[type=file] { display: block; width: 100%; padding: 18px; border: 2px dashed #a9b4c3; border-radius: 12px; }
+  .price-scroll { max-height: 70vh; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .price-table { min-width: 1250px; width: 100%; border-collapse: separate; border-spacing: 0; }
+  .price-table th, .price-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #e5e7eb; }
+  .price-table thead th { position: sticky; top: 0; z-index: 2; }
+  .price-table select { width: 240px; max-width: 100%; }
+  .price-table ul { margin: 0; padding-left: 18px; }
+  .price-error { color: #b42318; }
+  .price-table tr.price-row-problem td { background: #fff1f0; }
+  .price-table tr.price-row-problem:target td { background: #ffd9d4; }
+  .dark .price-table tr.price-row-problem td { background: #4a2020; }
+  .dark .price-table tr.price-row-problem:target td { background: #733333; }
+  .price-table tr { scroll-margin-top: 64px; }
+  .price-status { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; font-size: 16px; font-weight: 700; }
+  .price-status-good { background: #d1fadf; color: #067647; }
+  .price-status-bad { background: #fee4e2; color: #b42318; }
+  .price-problems { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
+  .price-problems a { padding: 6px 10px; border: 1px solid #f97066; border-radius: 8px; color: #b42318; text-decoration: none; }
+  .price-problems a:hover, .price-problems a:focus { background: #fee4e2; }
+  .price-apply-error { margin: 16px 0; padding: 14px 18px; border: 2px solid #d92d20; border-radius: 10px; background: #fff1f0; color: #912018; }
+  .dark .price-apply-error { background: #4a2020; color: #fff; }
+  .excel-preview-control:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+<p>Загрузите принятую редакцию единого прайса. Цены Зеленограда и Москвы сравниваются и обновляются вместе. Назначения мастеров и содержание страниц не меняются.</p>
+<form method="post" enctype="multipart/form-data" class="price-upload">{% csrf_token %}
+  <label for="price-file">Файл Excel (.xlsx), до 5 МБ</label>
+  <input id="price-file" type="file" name="file" accept=".xlsx" required>
+  {% component "unfold/components/button.html" with submit=1 variant="primary" %}Разобрать прайс{% endcomponent %}
+</form>
+
+{% if preview %}
+<div id="price-import-result">
+  {% if apply_error %}<div class="price-apply-error" role="alert"><strong>Прайс не применён.</strong> {{ apply_error }}
+    {% if failed_row %}<a href="#price-row-{{ failed_row }}">Перейти к строке {{ failed_row }}</a>{% endif %}
+  </div>{% endif %}
+</div>
+<h2>{{ preview.sheet }}</h2>
+<p>Строк услуг: {{ rows|length }}; готовы к применению: {{ ready_count }}; требуют решения: {{ problem_rows|length }}. Столбец R связывает редакции прайса; B обновляет краткое описание. W зарезервирован для содержания страницы и сейчас не импортируется.</p>
+{% if problem_rows %}
+  <h3>Требуют решения: {{ problem_rows|length }}</h3>
+  <p>Перейдите к строке, выберите услугу или «Создать новую», затем примените нужные строки.</p>
+  <nav class="price-problems" aria-label="Проблемные строки">
+    {% for row in problem_rows %}<a href="#price-row-{{ row.row }}">Строка {{ row.row }} · {{ row.price_code }}</a>{% endfor %}
+  </nav>
+{% else %}<p>✓ Все строки сопоставлены.</p>{% endif %}
+<form method="post" action="{% url 'admin:services_servicecategory_import_excel' %}" id="excel-preview-form">{% csrf_token %}
+  <p>Для строк без автоматического совпадения выберите существующую услугу или явно укажите «Создать новую». Отмеченные строки применяются сразу к обоим салонам.</p>
+  <div class="flex flex-wrap items-center gap-3 my-3">
+    <button type="button" id="select-all-rows" class="excel-preview-control font-medium inline-flex items-center px-3 py-2 rounded-default bg-primary-600 text-white cursor-pointer">Выбрать все</button>
+    <button type="button" id="clear-selected-rows" class="excel-preview-control font-medium inline-flex items-center px-3 py-2 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent cursor-pointer" disabled>Снять выбор</button>
+  </div>
+  <div class="price-scroll"><table class="price-table"><thead><tr>
+    <th class="bg-white dark:bg-base-900">Применить</th>
+    <th class="bg-white dark:bg-base-900">Строка / код</th>
+    <th class="bg-white dark:bg-base-900">Услуга и классификация</th>
+    <th class="bg-white dark:bg-base-900">Зеленоград</th>
+    <th class="bg-white dark:bg-base-900">Москва</th>
+    <th class="bg-white dark:bg-base-900">Изменения</th>
+    <th class="bg-white dark:bg-base-900">Сопоставление</th>
+  </tr></thead><tbody>
+  {% for row in rows %}<tr id="price-row-{{ row.row }}"{% if row.errors %} class="price-row-problem"{% endif %}>
+    <td><span class="price-status {% if row.errors %}price-status-bad{% else %}price-status-good{% endif %}" role="img" aria-label="{% if row.errors %}Требует решения{% else %}Готова{% endif %}">{% if row.errors %}⊘{% else %}✓{% endif %}</span><br><input type="checkbox" name="selected_rows" value="{{ row.row }}" {% if row.checked %}checked{% endif %} aria-label="Применить строку {{ row.row }}"></td>
+    <td>{{ row.row }}<br><strong>{{ row.price_code }}</strong></td>
+    <td><strong>{{ row.title }}</strong><br>{{ row.direction }} / {{ row.group }}<br><small>Учёт: {{ row.internal_category }}</small>
+      {% if row.description %}<br><small>{{ row.description|truncatechars:180 }}</small>{% endif %}
+      {% for error in row.errors %}<p class="price-error">{{ error }}</p>{% endfor %}
+      {% if row.work_comment %}<p><small>Рабочий комментарий: {{ row.work_comment|truncatechars:180 }}</small></p>{% endif %}</td>
+    <td><ul>{% for price in row.prices_by_city.zelenograd %}<li>{{ price.level|default:'Единая цена' }}: {% if price.status == 'amount' %}{{ price.amount }} ₽{% elif price.status == 'dash' %}—{% else %}пусто{% endif %}</li>{% endfor %}</ul></td>
+    <td><ul>{% for price in row.prices_by_city.moscow %}<li>{{ price.level|default:'Единая цена' }}: {% if price.status == 'amount' %}{{ price.amount }} ₽{% elif price.status == 'dash' %}—{% else %}пусто{% endif %}</li>{% empty %}Не представлена{% endfor %}</ul></td>
+    <td><ul>{% for detail in row.details %}<li>{{ detail|truncatechars:220 }}</li>{% endfor %}</ul></td>
+    <td>{% if row.automatic %}<small>Найдено: #{{ row.automatic.pk }} {{ row.automatic.title|truncatechars:70 }}</small><br>{% endif %}
+      <select name="match_{{ row.row }}" aria-label="Сопоставление строки {{ row.row }}">
+        <option value="" {% if not row.selected_match %}selected{% endif %}>{% if row.automatic %}Использовать найденную{% else %}Выберите действие{% endif %}</option>
+        {% for candidate in row.candidates %}<option value="{{ candidate.pk }}" {% if row.selected_match == candidate.pk|stringformat:'s' %}selected{% endif %}>#{{ candidate.pk }} {{ candidate.title|truncatechars:70 }}</option>{% endfor %}
+        <option value="new" {% if row.selected_match == 'new' %}selected{% endif %}>Создать новую услугу</option>
+      </select></td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  <div class="flex flex-wrap gap-3 mt-4">
+    <button type="submit" name="review_matches" value="1" hidden>Обновить проверку</button>
+    <button type="submit" name="apply_selected" value="1" id="apply-selected-rows" class="font-medium inline-flex items-center gap-2 px-3 py-2 rounded-default bg-primary-600 text-white cursor-pointer">Применить выбранные строки</button>
+    <span id="selected-count" aria-live="polite">Выбрано строк: {{ selected_count }}</span>
+    <span id="import-progress" role="status" hidden>Импорт выполняется. Дождитесь ответа сервера.</span>
+  </div>
+</form>
+<script src="{% static 'services/js/unified_excel_import.js' %}" defer></script>
+{% endif %}
+{% endblock %}

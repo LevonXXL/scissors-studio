@@ -66,7 +66,8 @@ export const stats = [
   { value: '5.0', label: 'рейтинг' },
 ];
 
-// src/data/home.ts
+export const workImages = [1, 2, 3, 4].map((number) => `/img/home/work-${number}.jpg`);
+export const popularImages = [1, 2, 3].map((number) => `/img/home/popular-${number}.jpg`);
 
 export const advantages = [
   {
@@ -75,13 +76,13 @@ export const advantages = [
     icon: '/img/advantages/cosmetics_creme.svg',
   },
   {
-    title: 'Эксперты международного класса',
-    description: 'Команда, которая не просто следует стандартам индустрии, а формирует их',
+    title: 'Гарантия на работы',
+    description: 'Отвечаем за качество каждой процедуры',
     icon: '/img/advantages/star_hand_quality_guarantee.svg',
   },
   {
-    title: 'Гарантия на работы',
-    description: 'Отвечаем за качество каждой процедуры',
+    title: 'Эксперты международного класса и судьи чемпионатов',
+    description: 'Команда, которая не просто следует стандартам индустрии, а формирует их',
     icon: '/img/advantages/profession_teacher.svg',
   },
   {
@@ -92,7 +93,12 @@ export const advantages = [
   {
     title: 'Work Lounge',
     description: 'В каждом салоне оборудована зона, где можно комфортно разместиться с ноутбуком и выпить кофе',
-    icon: '/img/advantages/armchair_comfort.svg',
+    icon: '/img/advantages/coffee_tea.svg',
+  },
+  {
+    title: 'Единый стандарт качества',
+    description: 'Система фиксирует бьюти-стратегию каждого клиента: формулы, составы и подходы',
+    icon: '/img/advantages/certificate_quality.svg',
   },
   {
     title: '3D-подход к красоте',

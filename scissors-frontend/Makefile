@@ -14,6 +14,7 @@ LOCAL_DIST_DIR = dist/ssr
 REMOTE_USER = levon
 REMOTE_HOST = chinese-russian.com
 REMOTE_PATH = /opt/scissors-frontend
+STATIC_REMOTE_PATH = /opt/scissors-backend/staticfiles
 
 
 # --- Systemd ---
@@ -49,6 +50,8 @@ sync-dry-run:
 	$(RSYNC_CMD) --dry-run \
 		$(LOCAL_DIST_DIR)/ \
 		$(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
+	@echo "[SYNC-DRY-RUN] Проверка файлов public/ для Angie /static/:"
+	rsync -av --dry-run -e ssh public/ $(REMOTE_USER)@$(REMOTE_HOST):$(STATIC_REMOTE_PATH)/
 
 
 .PHONY: sync-prod
@@ -60,6 +63,12 @@ sync-prod:
 		$(LOCAL_DIST_DIR)/ \
 		$(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
 	@echo "[SYNC-PROD] Синхронизация завершена."
+
+
+.PHONY: sync-public-static
+sync-public-static:
+	@echo "[STATIC] Копирование public/ в каталог Angie /static/ без удаления Django-статики"
+	rsync -av -e ssh public/ $(REMOTE_USER)@$(REMOTE_HOST):$(STATIC_REMOTE_PATH)/
 
 
 # ============================================================
@@ -105,7 +114,7 @@ logs:
 # ============================================================
 
 .PHONY: deploy
-deploy: build sync-prod install-prod restart
+deploy: build sync-prod sync-public-static install-prod restart
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ Scissors Studio frontend deployed"

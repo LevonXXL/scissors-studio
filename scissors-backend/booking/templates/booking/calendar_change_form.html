@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'booking/calendar.css' %}">
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} booking-calendar-modal-form{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block header %}{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-global-side %}{% endblock %}

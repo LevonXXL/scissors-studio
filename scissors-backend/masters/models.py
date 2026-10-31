@@ -1,4 +1,6 @@
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.conf import settings
 from filer.fields.image import FilerImageField
 
 from pages.models import Page
@@ -9,9 +11,7 @@ class Master(models.Model):
     """
     Мастер-партнёр.
 
-    Статус и категория — структурированные поля, не текст в описании:
-    именно это требовалось показать в карточке мастера по итогам аудита
-    (см. критические расхождения по /vacancy и картам мастеров).
+    Статус и подтверждённый уровень прайса хранятся отдельно от описания.
     """
 
     STATUS_SELF_EMPLOYED = 'self_employed'
@@ -21,21 +21,10 @@ class Master(models.Model):
         (STATUS_IP, 'ИП'),
     ]
 
-    CATEGORY_UNIVERSAL = 'universal'
-    CATEGORY_STYLIST = 'stylist'
-    CATEGORY_ART_DIRECTOR = 'art_director'
-    CATEGORY_CHOICES = [
-        (CATEGORY_UNIVERSAL, 'Универсал / Модельер'),
-        (CATEGORY_STYLIST, 'Стилист / Топ-стилист'),
-        (CATEGORY_ART_DIRECTOR, 'Арт-директор'),
-    ]
-
     salons = models.ManyToManyField(
         Salon, through='MasterSalon', verbose_name='Салоны', related_name='masters', blank=True,
-        help_text='Один мастер может работать в нескольких салонах — цены на услуги в каждом '
-                   'салоне задаются отдельно через ServiceStaffPrice (Service уже привязан '
-                   'к конкретному салону через категорию), само наличие мастера в нескольких '
-                   'салонах не влияет на расчёт цены.'
+        help_text='Один мастер может работать в нескольких салонах. Доступность услуги и цена '
+                   'настраиваются отдельно для каждого салона; назначения услуг мастеру тоже привязаны к салону.'
     )
 
     name = models.CharField('Имя', max_length=255)
@@ -43,8 +32,24 @@ class Master(models.Model):
         Page, verbose_name='Страница', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='master',
     )
-    specialization = models.CharField('Специализация', max_length=255, help_text='Например: "Стрижки, окрашивание"')
-    category = models.CharField('Категория', max_length=32, choices=CATEGORY_CHOICES, default=CATEGORY_UNIVERSAL)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, verbose_name='Учётная запись', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='master_profile',
+    )
+    PRICE_LEVEL_CHOICES = [
+        ('universal', 'Универсал'), ('modeler', 'Модельер'),
+        ('stylist', 'Стилист'), ('top_stylist', 'Топ-стилист'),
+        ('art_director', 'Арт-директор'), ('nail_master', 'Мастер ногтевого сервиса'),
+        ('top_nail_master', 'Топ-мастер ногтевого сервиса'),
+    ]
+    price_level = models.CharField(
+        'Подтверждённый уровень прайса', max_length=32, choices=PRICE_LEVEL_CHOICES,
+        blank=True, help_text='Устанавливается вручную; не выводится из данных YCLIENTS.',
+    )
+    is_booking_placeholder = models.BooleanField(
+        'Техническая запись для бронирования', default=False,
+        help_text='Лист ожидания или общая позиция без назначенного мастера. Не показывается как специалист и не получает уровень прайса.',
+    )
 
     status = models.CharField(
         'Статус', max_length=32, choices=STATUS_CHOICES, default=STATUS_SELF_EMPLOYED,
@@ -98,6 +103,11 @@ class Master(models.Model):
     def __str__(self):
         return self.name
 
+    def clean(self):
+        super().clean()
+        if self.is_booking_placeholder and self.price_level:
+            raise ValidationError({'price_level': 'Техническая запись не имеет уровня прайса.'})
+
     def save(self, *args, **kwargs):
         if not self.slug:
             from core_utils.slugify_ru import slugify_ru
@@ -116,7 +126,7 @@ class MasterSalon(models.Model):
 
     Хранит yclients_staff_id — идентификатор привязки мастера к конкретному
     салону в YCLIENTS. У одного мастера разные staff_id в разных салонах.
-    Нужен для построения ссылок на букинг YCLIENTS (параметр master_id в URL).
+    Также хранит прямую ссылку записи к мастеру именно в этом салоне.
     """
     master = models.ForeignKey(Master, on_delete=models.CASCADE, related_name='master_salons')
     salon = models.ForeignKey(Salon, on_delete=models.CASCADE, related_name='master_salons')
@@ -124,6 +134,10 @@ class MasterSalon(models.Model):
         'YCLIENTS staff ID', max_length=32, blank=True, null=True, unique=True,
         help_text='Идентификатор привязки мастера к этому салону. '
                   'Используется для ссылок на запись в YCLIENTS.',
+    )
+    yclients_booking_url = models.URLField(
+        'Ссылка на запись в YCLIENTS', max_length=500, blank=True, default='',
+        help_text='Прямая форма записи к этому мастеру в данном салоне. Не обновляется синхронизацией.',
     )
 
     class Meta:

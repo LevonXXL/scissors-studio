@@ -100,12 +100,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch } from 'vue';
-import { fetchReviews, fetchSalons } from '@/api/endpoints';
+import type { FetchReviewsParams } from '@/api/endpoints';
 import type { Review, ReviewSource, Salon } from '@/api/types';
 import { REVIEW_SOURCE_LABELS } from '@/api/types';
+import { useReviewsStore, reviewFilterKey } from '@/stores/reviews';
+import { useSalonsStore } from '@/stores/salons';
 import ImageLightbox from '@/components/ImageLightbox.vue';
-import { getThumbnailUrl } from '@/utils/thumbnailUrl';
-import { MEDIA_URL } from '@/config/urls';
+import { mediaImageUrl, mediaPreviewUrl } from '@/config/urls';
 
 const props = withDefaults(defineProps<{
   /** Если задан — компонент показывает отзывы только этого салона и прячет
@@ -120,29 +121,41 @@ const props = withDefaults(defineProps<{
 });
 
 const lockedSalonId = computed(() => props.salonId);
-
-const reviews = ref<Review[]>([]);
-const loading = ref(true);
-const salons = ref<Salon[]>([]);
+const reviewsStore = useReviewsStore();
+const salonsStore = useSalonsStore();
+const salons = computed<Salon[]>(() => salonsStore.list);
 const failedPreviews = ref(new Set<string>());
 const lightboxOpen = ref(false);
 const lightboxImages = ref<{ src: string; alt: string }[]>([]);
 
 function reviewImageSource(image: Review['images'][number]): string {
   const original = image.image || image.preview || '';
-  return failedPreviews.value.has(original) ? original : getThumbnailUrl(original, 500, MEDIA_URL);
+  return failedPreviews.value.has(original) ? mediaImageUrl(original) : mediaPreviewUrl(original, 500);
 }
 
 function openReviewImages(review: Review) {
   lightboxImages.value = review.images
     .map((image) => image.image || image.preview || '')
     .filter(Boolean)
-    .map((src) => ({ src, alt: `Фото из отзыва ${review.author || 'гостя'}` }));
+    .map((src) => ({ src: mediaImageUrl(src), alt: `Фото из отзыва ${review.author || 'гостя'}` }));
   lightboxOpen.value = lightboxImages.value.length > 0;
 }
 
 const selectedSalonId = ref<number | null>(props.salonId ?? null);
 const selectedSource = ref<ReviewSource | null>(null);
+const reviewParams = computed<FetchReviewsParams>(() => ({
+  ...(selectedSalonId.value !== null ? { salon: selectedSalonId.value } : {}),
+  ...(selectedSource.value !== null ? { source: selectedSource.value } : {}),
+  ...(props.withImagesOnly ? { withImages: true } : {}),
+}));
+const currentReviewKey = computed(() => reviewFilterKey(reviewParams.value));
+const reviews = computed(() => {
+  const items = reviewsStore.byFilter[currentReviewKey.value] ?? [];
+  return props.withImagesOnly
+    ? items.filter((review) => review.images.some((image) => !!(image.image || image.preview)))
+    : items;
+});
+const loading = computed(() => !reviewsStore.loaded[currentReviewKey.value]);
 
 const salonOptions = computed(() => [
   { value: null, label: 'Все салоны' },
@@ -159,43 +172,15 @@ const sourceOptions = computed(() => [
     })),
 ]);
 
-async function load() {
-  loading.value = true;
-  try {
-    const loaded = await fetchReviews({
-      ...(selectedSalonId.value !== null ? { salon: selectedSalonId.value } : {}),
-      ...(selectedSource.value !== null ? { source: selectedSource.value } : {}),
-      ...(props.withImagesOnly ? { withImages: true } : {}),
-    });
-    reviews.value = props.withImagesOnly
-      ? loaded.filter((review) => review.images.some((image) => !!(image.image || image.preview)))
-      : loaded;
-  } catch (err) {
-    // Не даём сбою API (бэкенд недоступен и т.п.) уронить весь SSR-процесс —
-    // см. аналогичный фикс в pages-store.ts. Просто остаёмся с пустым списком.
-    console.error('Не удалось загрузить отзывы:', err);
-    reviews.value = [];
-  } finally {
-    loading.value = false;
-  }
-}
-
-// Список салонов для чипов-фильтров нужен, только если салон не зафиксирован
-// пропсом — на странице салона фильтр по салону не показывается вовсе.
-async function loadSalonsIfNeeded() {
-  if (lockedSalonId.value) return;
-  try {
-    salons.value = await fetchSalons();
-  } catch (err) {
-    console.error('Не удалось загрузить список салонов для фильтра отзывов:', err);
-    salons.value = [];
-  }
-}
-
-const initialLoad = Promise.all([load(), loadSalonsIfNeeded()]);
+const initialLoad = Promise.all([
+  reviewsStore.load(reviewParams.value),
+  lockedSalonId.value ? Promise.resolve() : salonsStore.loadList(),
+]);
 onServerPrefetch(() => initialLoad);
 
-watch([selectedSalonId, selectedSource], load);
+watch([selectedSalonId, selectedSource], () => {
+  void reviewsStore.load(reviewParams.value);
+});
 
 // --- Карусель: горизонтальный скролл со стрелками (как было в HomePage) ---
 const scrollContainer = ref<HTMLElement | null>(null);

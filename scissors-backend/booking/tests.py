@@ -83,7 +83,7 @@ class ReminderLogicTests(TestCase):
         cls.salon = Salon.objects.create(
             name='Тестовый салон', address='Где-то', latitude='0', longitude='0',
         )
-        cls.master = Master.objects.create(name='Тест Тестов', specialization='Стрижки')
+        cls.master = Master.objects.create(name='Тест Тестов', )
         cls.master.salons.add(cls.salon)
         cls.now = timezone.now()
 

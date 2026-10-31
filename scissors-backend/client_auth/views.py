@@ -42,6 +42,16 @@ class VerifyCodeView(APIView):
         return Response(auth_response(user))
 
 
+class VerifyProfilePhoneView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = VerifyCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = verify_code(request, **serializer.validated_data, target_user=profile_user(request))
+        return Response(profile_response(user))
+
+
 class LoginPasswordView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []

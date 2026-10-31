@@ -8,16 +8,18 @@ export type SalonSlug = 'moscow' | 'zelenograd';
 export const useSalonStore = defineStore('salon', () => {
   const selectedSalonSlug = ref<SalonSlug | null>(null);
 
-  // Загрузка из localStorage при инициализации (только на клиенте)
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('selectedSalonSlug') as SalonSlug;
-    if (saved && salons.some(s => s.slug === saved)) {
-      selectedSalonSlug.value = saved;
-    } else {
-      // Фоллбэк на первый салон (Москва), если ничего не сохранено
+  // Read browser preferences only after the server markup is hydrated.
+  const restoreSelection = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = window.localStorage.getItem('selectedSalonSlug') as SalonSlug;
+      selectedSalonSlug.value = saved && salons.some(s => s.slug === saved)
+        ? saved
+        : 'moscow';
+    } catch {
       selectedSalonSlug.value = 'moscow';
     }
-  }
+  };
 
   // Сохранение в localStorage при изменении
   watch(selectedSalonSlug, (newVal) => {
@@ -32,12 +34,13 @@ export const useSalonStore = defineStore('salon', () => {
 
   // Геттер для получения полного объекта текущего салона
   const currentSalon = computed<SalonInfo>(() =>
-    salons.find(s => s.slug === selectedSalonSlug.value) || salons[0]
+    salons.find(s => s.slug === selectedSalonSlug.value) || salons[0]!
   );
 
   return {
     selectedSalonSlug,
     setSalon,
+    restoreSelection,
     currentSalon,
     allSalons: salons
   };

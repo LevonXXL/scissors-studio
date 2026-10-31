@@ -37,10 +37,11 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Public origins are configured once per deployment; SITE_URL is shared with
 # the frontend build, while STATIC_URL and MEDIA_URL can point to a CDN.
 SITE_URL = (os.environ.get('SITE_URL') or os.environ.get('FRONTEND_BASE_URL')
-            or ('http://localhost:9100' if DEBUG else 'https://scissors-studio.ru')).rstrip('/')
-API_ORIGIN = os.environ.get('API_ORIGIN', 'http://localhost:8000' if DEBUG else 'https://api.scissors-studio.ru').rstrip('/')
+            or ('http://localhost:9100' if DEBUG else 'https://scissors.group')).rstrip('/')
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1', cast=Csv())
+API_ORIGIN = os.environ.get('API_ORIGIN', 'http://localhost:8000' if DEBUG else 'https://api.studio.scissors.group').rstrip('/')
+
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1,scissors.group,scissors-studio.online,api.studio.scissors.group,static.scissors-studio.online,admin.studio.scissors.group', cast=Csv())
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
 # Application definition
@@ -72,6 +73,7 @@ INSTALLED_APPS = [
     'reviews',
     'client_auth',
     'communications',
+    'search',
 ]
 
 UNFOLD = {
@@ -79,6 +81,11 @@ UNFOLD = {
     "SITE_HEADER": "Scissors Studio",
     "SITE_URL": "/",
     "SITE_SYMBOL": "content_cut",
+    "SITE_FAVICONS": [{
+        "rel": "icon",
+        "type": "image/x-icon",
+        "href": lambda request: static("scissors_studio/favicon.ico"),
+    }],
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": True,
     "SIDEBAR": {
@@ -95,6 +102,7 @@ UNFOLD = {
 YCLIENTS_PARTNER_TOKEN = os.environ.get('YCLIENTS_PARTNER_TOKEN', '')
 YCLIENTS_USER_TOKEN = os.environ.get('YCLIENTS_USER_TOKEN', '')
 REWIO_API_KEY = os.environ.get('REWIO_API_KEY', '')
+MANTICORE_HOST = os.environ.get('MANTICORE_HOST', 'http://127.0.0.1:9308').rstrip('/')
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 
 # Celery — без Redis задачи напоминаний выполнять некому,
@@ -107,6 +115,11 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 300.0,  # каждые 5 минут
     },
 }
+if os.environ.get('MANTICORE_AUTO_INDEX', 'False').lower() in ('true', '1', 'yes'):
+    CELERY_BEAT_SCHEDULE['refresh-manticore-index'] = {
+        'task': 'search.tasks.refresh_manticore_index',
+        'schedule': 3600.0,
+    }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -124,7 +137,7 @@ ROOT_URLCONF = 'scissors_studio.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -182,10 +195,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = os.environ.get('STATIC_URL', f'{API_ORIGIN}/static/' if not DEBUG else '/static/')
+STATIC_URL = os.environ.get('STATIC_URL', 'https://static.scissors-studio.online/static/' if not DEBUG else '/static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = os.environ.get('MEDIA_URL', f'{API_ORIGIN}/media/' if not DEBUG else '/media/')
+MEDIA_URL = os.environ.get('MEDIA_URL', 'https://static.scissors-studio.online/media/' if not DEBUG else '/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -296,6 +309,49 @@ CKEDITOR_5_CONFIGS = {
                 {'name': 'a', 'classes': True, 'attributes': ['title', 'target', 'rel']},
                 {'name': 'img', 'classes': True, 'attributes': ['alt', 'title']},
             ],
+        },
+    },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+
+    'formatters': {
+        'console': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        },
+    },
+
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
+
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'console',
+            'level': 'INFO',
+        },
+    },
+
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
         },
     },
 }

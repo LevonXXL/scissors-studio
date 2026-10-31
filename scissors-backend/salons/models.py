@@ -61,6 +61,10 @@ class Salon(models.Model):
         'ID филиала в YCLIENTS', max_length=32, blank=True, unique=True, null=True,
         help_text='company_id конкретного филиала в YCLIENTS — салоны Москва и Зеленоград это разные company_id.'
     )
+    yclients_booking_url = models.URLField(
+        'Ссылка на запись в YCLIENTS', max_length=500, blank=True, default='',
+        help_text='Ссылка на форму записи именно этого салона. Не обновляется синхронизацией.',
+    )
 
     # Добавить в класс Salon (после yclients_company_id и last_synced_at)
 

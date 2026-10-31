@@ -20,14 +20,13 @@
         <div class="q-mt-md">
           <q-btn
             unelevated no-caps label="Онлайн-запись"
-            href="https://n84109.yclients.com/select-city?o=" target="_blank" rel="noopener"
+            :href="salonBookingUrl(salon)" target="_blank" rel="noopener noreferrer"
             :style="{ background: 'var(--sc-accent)', color: '#fff' }"
           />
         </div>
       </q-card>
 
       <section v-if="photos.length" class="q-mb-xl">
-        <h2 class="text-h5 text-weight-bold q-mb-md">Фотографии салона</h2>
         <ImageGallery :images="photos" />
       </section>
 
@@ -77,6 +76,7 @@ import { useMeta } from 'quasar';
 import YandexMap from '@/components/YandexMap.vue';
 import ReviewsSection from '@/components/ReviewsSection.vue';
 import ImageGallery from '@/components/ImageGallery.vue';
+import { salonBookingUrl } from '@/utils/yclientsBooking';
 
 const props = defineProps<{ slug: string }>();
 const salonsStore = useSalonsStore();

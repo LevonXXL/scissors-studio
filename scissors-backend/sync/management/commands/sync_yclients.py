@@ -6,7 +6,7 @@ from sync.sync_service import sync_salon_full
 
 
 class Command(BaseCommand):
-    help = 'Синхронизирует салоны, мастеров, категории и услуги с YCLIENTS.'
+    help = 'Синхронизирует салоны и мастеров с YCLIENTS; услуги ведутся из Excel.'
 
     def add_arguments(self, parser):
         parser.add_argument(

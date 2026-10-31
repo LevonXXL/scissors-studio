@@ -6,11 +6,7 @@
   адрес, фото и т.п. — то, что реально приходит из YCLIENTS);
 - "управляемые вручную в админке" — синхронизация их не трогает, потому
   что в YCLIENTS этих данных просто нет. Пример: Master.status
-  (самозанятый/ИП) и Master.category (Универсал/Стилист/Арт-директор) —
-  это бизнес-классификация, специфичная для аудита соответствия модели
-  независимых партнёров, YCLIENTS о ней ничего не знает. Синхронизация
-  задаёт им разумные значения по умолчанию только при ПЕРВОМ создании
-  мастера и больше не трогает эти поля.
+  (самозанятый/ИП) и Master.price_level — эти значения задаются вручную.
 """
 
 from __future__ import annotations
@@ -22,7 +18,6 @@ from django.utils import timezone
 
 from masters.models import Master, MasterSalon
 from salons.models import Salon, SalonPhoto
-from services.models import Service, ServiceCategory, ServiceStaffPrice
 
 from .client import YClientsDataClient
 from .images import fetch_and_store_image
@@ -86,7 +81,7 @@ def _sync_salon_photos(salon: Salon, photo_paths: list[str]) -> None:
 
 def sync_staff(salon, client):
     staff_list = client.get_staff(salon.yclients_company_id)
-    result = {}  # {relationship_id: Master} — для сопоставления цен в sync_services
+    result = {}  # {relationship_id: Master} — для вызывающих интеграций
     name_counts = Counter(_staff_name(entry.get('name')) for entry in staff_list)
 
     for entry in staff_list:
@@ -152,7 +147,6 @@ def sync_staff(salon, client):
                 is_system=is_system,
                 name=entry.get('name', ''),
                 status=Master.STATUS_SELF_EMPLOYED,
-                category=Master.CATEGORY_UNIVERSAL,
             )
 
         if user_id:
@@ -161,7 +155,6 @@ def sync_staff(salon, client):
             master.yclients_user_id = None
         master.yclients_staff_id = relationship_id  # только справочное последнее значение
         master.name = entry.get('name') or master.name
-        master.specialization = entry.get('specialization') or master.specialization
         master.is_active = not (entry.get('fired') or entry.get('hidden'))
         master.last_synced_at = timezone.now()
         master.save()
@@ -212,96 +205,8 @@ def sync_staff(salon, client):
 
     return result
 
-def sync_categories(salon: Salon, client: YClientsDataClient) -> dict[str, ServiceCategory]:
-    categories = client.get_service_categories(salon.yclients_company_id)
-    result = {}
-
-    for entry in categories:
-        yclients_id = str(entry['id'])
-        category, _ = ServiceCategory.objects.update_or_create(
-            salon=salon,
-            yclients_category_id=yclients_id,
-            defaults={
-                'title': entry.get('title', ''),
-                'weight': entry.get('weight', 0),
-                'is_chain': bool(entry.get('is_chain')),
-                'last_synced_at': timezone.now(),
-            },
-        )
-        result[yclients_id] = category
-
-    return result
-
-
-def sync_services(
-    salon: Salon,
-    client: YClientsDataClient,
-    categories_by_yid: dict[str, ServiceCategory],
-    masters_by_yid: dict[str, Master],
-) -> None:
-    services = client.get_services(salon.yclients_company_id)
-
-    for entry in services:
-        category = categories_by_yid.get(str(entry.get('category_id')))
-        if category is None:
-            logger.warning(
-                'Услуга "%s" (id=%s) ссылается на неизвестную категорию %s — пропускаю.',
-                entry.get('title'), entry.get('id'), entry.get('category_id'),
-            )
-            continue
-
-        image = None
-        image_group = entry.get('image_group') or {}
-        images = image_group.get('images') or {}
-        if images:
-            # Предпочитаем версию "basic", если она есть, иначе — любую первую.
-            variant = images.get('basic') or next(iter(images.values()))
-            image_url = variant.get('path') or variant.get('relative_path')
-            image = fetch_and_store_image(image_url, folder_name='services/photos')
-
-        service, _ = Service.objects.update_or_create(
-            yclients_service_id=str(entry['id']),
-            defaults={
-                'category': category,
-                'title': entry.get('title', ''),
-                'description': entry.get('comment', ''),
-                'price_min': entry.get('price_min') or 0,
-                'price_max': entry.get('price_max') or 0,
-                'duration_seconds': entry.get('duration'),
-                'is_active': bool(entry.get('active')),
-                'weight': entry.get('weight', 0),
-                'last_synced_at': timezone.now(),
-                **({'image': image} if image else {}),
-            },
-        )
-
-        _sync_service_staff_prices(service, entry.get('staff') or [], masters_by_yid)
-
-
-def _sync_service_staff_prices(service: Service, staff_entries: list[dict], masters_by_yid: dict[str, Master]) -> None:
-    for staff_entry in staff_entries:
-        master = masters_by_yid.get(str(staff_entry.get('id')))
-        if master is None:
-            continue  # мастер скрыт/не синхронизирован — пропускаем переопределение
-
-        price_range = staff_entry.get('price') or {}
-        price_min = price_range.get('min') if isinstance(price_range, dict) else None
-        price_max = price_range.get('max') if isinstance(price_range, dict) else None
-        duration = staff_entry.get('seance_length')
-
-        if price_min is None and price_max is None and duration is None:
-            continue  # нет переопределения — используется базовая цена услуги
-
-        ServiceStaffPrice.objects.update_or_create(
-            service=service,
-            master=master,
-            defaults={'price_min': price_min, 'price_max': price_max, 'duration_seconds': duration},
-        )
-
-
 def sync_salon_full(salon: Salon) -> None:
-    """Полная синхронизация одного салона: сам салон, сотрудники, категории, услуги.
-    Порядок важен — услугам и ценам нужны уже засинхронленные категории и мастера."""
+    """Синхронизировать салон и мастеров; каталогом владеет Excel."""
     if not salon.yclients_company_id:
         logger.warning('У салона "%s" не задан yclients_company_id — пропускаю.', salon)
         return
@@ -309,6 +214,6 @@ def sync_salon_full(salon: Salon) -> None:
     client = YClientsDataClient()
 
     sync_salon(salon, client)
-    masters_by_yid = sync_staff(salon, client)
-    categories_by_yid = sync_categories(salon, client)
-    sync_services(salon, client, categories_by_yid, masters_by_yid)
+    sync_staff(salon, client)
+    # Excel owns the service catalogue, availability and prices. Staff and
+    # booking identifiers continue to come from YCLIENTS.

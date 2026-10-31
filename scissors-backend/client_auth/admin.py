@@ -7,7 +7,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
 
-from .models import PendingEmailVerification, VerifiedEmail
+from .models import PendingEmailVerification, VerifiedEmail, VerifiedPhone
+from .services import normalize_phone
 
 
 User = get_user_model()
@@ -39,10 +40,61 @@ class AdminUserChangeForm(UserChangeForm):
         return cleaned_data
 
 
+class VerifiedPhoneInlineForm(forms.ModelForm):
+    phone = forms.CharField(label='Телефон', max_length=32)
+
+    class Meta:
+        model = VerifiedPhone
+        fields = ('phone',)
+
+    def clean_phone(self):
+        try:
+            phone = normalize_phone(self.cleaned_data['phone'])
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.messages) from exc
+        if User.objects.filter(username=phone).exclude(pk=self.instance.user_id).exists():
+            raise forms.ValidationError('Этот номер уже используется другим пользователем.')
+        return phone
+
+
+class VerifiedPhoneInline(admin.TabularInline):
+    model = VerifiedPhone
+    form = VerifiedPhoneInlineForm
+    extra = 1
+    fields = ('phone', 'confirmation_date')
+    readonly_fields = ('confirmation_date',)
+    verbose_name = 'Подтверждённый телефон'
+    verbose_name_plural = 'Подтверждённые телефоны'
+
+    @admin.display(description='Подтверждён')
+    def confirmation_date(self, obj):
+        return obj.verified_at if obj.pk else 'При сохранении'
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     form = AdminUserChangeForm
-    list_display = (*BaseUserAdmin.list_display, 'email_verified')
+    inlines = (VerifiedPhoneInline,)
+    list_display = (*BaseUserAdmin.list_display, 'phone_number', 'email_verified')
+    search_fields = (*BaseUserAdmin.search_fields, 'verified_phones__phone')
+
+    @admin.display(description='Телефон')
+    def phone_number(self, obj):
+        return ', '.join(identity.phone for identity in obj.verified_phones.all()) or '—'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('verified_phones')
+
+    def get_inline_instances(self, request, obj=None):
+        if not request.user.is_superuser or obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        if obj is not None and not request.user.is_superuser:
+            return (*fields, 'phone_number')
+        return fields
 
     @admin.display(boolean=True, description='Email подтверждён')
     def email_verified(self, obj):
@@ -51,12 +103,14 @@ class UserAdmin(BaseUserAdmin):
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
-        if request.user.is_superuser and obj is not None:
+        if obj is not None:
             for index, (title, options) in enumerate(fieldsets):
                 if 'email' in options.get('fields', ()):
                     fieldsets[index] = (title, {
                         **options,
-                        'fields': (*options['fields'], 'email_verified'),
+                        'fields': (*options['fields'], *(
+                            ('email_verified',) if request.user.is_superuser else ('phone_number',)
+                        )),
                     })
                     break
         return fieldsets
@@ -77,3 +131,14 @@ class UserAdmin(BaseUserAdmin):
         else:
             VerifiedEmail.objects.filter(user=obj).delete()
         PendingEmailVerification.objects.filter(user=obj).delete()
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model is not VerifiedPhone:
+            return super().save_formset(request, form, formset, change)
+        for instance in formset.save(commit=False):
+            if not instance.pk:
+                instance.verified_at = timezone.now()
+            instance.save()
+        for instance in formset.deleted_objects:
+            instance.delete()
+        formset.save_m2m()

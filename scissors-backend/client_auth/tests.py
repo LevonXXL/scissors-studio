@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
-from .admin import AdminUserChangeForm
+from .admin import AdminUserChangeForm, VerifiedPhoneInlineForm
 from .models import PendingEmailVerification, PhoneCode, PhoneVerificationSession, VerifiedEmail, VerifiedPhone
 
 
@@ -60,6 +60,56 @@ class ClientAuthTests(APITestCase):
         self.assertEqual(self.client.post('/api/v1/auth/login-password/', {
             'phone': self.phone, 'password': 'StaffPassphrase#539',
         }).status_code, 403)
+
+    def test_staff_can_verify_phone_in_profile_and_log_in_with_it(self):
+        staff = get_user_model().objects.create_user(
+            username='manager', password='StaffPassphrase#539', is_staff=True,
+        )
+        code = self.request_code()
+        self.client.force_authenticate(user=staff)
+        response = self.client.post('/api/v1/auth/phone/verify/', {'phone': self.phone, 'code': code})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['phone'], self.phone)
+        self.assertTrue(VerifiedPhone.objects.filter(user=staff, phone=self.phone).exists())
+        self.assertEqual(self.client.post('/api/v1/auth/phone/verify/', {
+            'phone': self.phone, 'code': code,
+        }).status_code, 401)
+        self.client.force_authenticate(user=None)
+        login = self.client.post('/api/v1/auth/login-password/', {
+            'phone': self.phone, 'password': 'StaffPassphrase#539',
+        })
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.data['is_staff'])
+        self.assertTrue(AccessToken(login.data['access'])['is_staff'])
+
+    def test_profile_can_add_second_verified_phone_and_log_in_with_either(self):
+        user = get_user_model().objects.create_user(username='client', password='StrongPassphrase#539')
+        first = '+79991234567'
+        second = '+79991112233'
+        VerifiedPhone.objects.create(user=user, phone=first, verified_at=timezone.now())
+        code = self.request_code(second)
+        self.client.force_authenticate(user=user)
+        response = self.client.post('/api/v1/auth/phone/verify/', {'phone': second, 'code': code})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['phone'], first)
+        self.assertEqual(response.data['phones'], [first, second])
+        self.client.force_authenticate(user=None)
+        for phone in (first, second):
+            login = self.client.post('/api/v1/auth/login-password/', {
+                'phone': phone, 'password': 'StrongPassphrase#539',
+            })
+            self.assertEqual(login.status_code, 200)
+            self.assertEqual(login.data['phones'], [first, second])
+
+    def test_verified_phone_cannot_be_claimed_by_another_profile(self):
+        owner = get_user_model().objects.create_user(username='owner')
+        other = get_user_model().objects.create_user(username='other', is_staff=True)
+        VerifiedPhone.objects.create(user=owner, phone=self.phone, verified_at=timezone.now())
+        code = self.request_code()
+        self.client.force_authenticate(user=other)
+        response = self.client.post('/api/v1/auth/phone/verify/', {'phone': self.phone, 'code': code})
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(VerifiedPhone.objects.filter(user=other).exists())
 
     def test_wrong_codes_are_limited(self):
         self.request_code()
@@ -240,7 +290,7 @@ class EmailAuthTests(APITestCase):
         request = self.client.post('/api/v1/auth/email/request-verification/', {'email': user.email})
         self.assertEqual(request.status_code, 202)
         token = self.confirmation_token()
-        self.assertIn(f'http://localhost:9100/login#verify_email={token}', mail.outbox[-1].body)
+        self.assertIn(f'http://localhost:9100/login?verify_email={token}', mail.outbox[-1].body)
         self.client.logout()
         self.assertEqual(self.client.post('/api/v1/auth/email/verify/', {'token': token}).status_code, 200)
         self.assertEqual(self.client.post('/api/v1/auth/email/verify/', {'token': token}).status_code, 403)
@@ -356,3 +406,68 @@ class AdminEmailVerificationTests(APITestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('email_verified', form.errors)
         self.assertFalse(VerifiedEmail.objects.filter(user=target).exists())
+
+    def test_superuser_can_view_and_add_multiple_phones(self):
+        User = get_user_model()
+        actor = User.objects.create_superuser('root', 'root@example.test', 'AdminPassphrase#539')
+        target = User.objects.create_user('client', 'client@example.test', 'ClientPassphrase#539')
+        self.client.force_login(actor)
+        self.assertContains(self.client.get(f'/admin/auth/user/{target.pk}/change/'), 'Подтверждённые телефоны')
+        response = self.client.post(f'/admin/auth/user/{target.pk}/change/', {
+            'username': target.username, 'email': target.email, 'is_active': 'on',
+            'date_joined_0': target.date_joined.date().isoformat(),
+            'date_joined_1': target.date_joined.time().strftime('%H:%M:%S'),
+            'verified_phones-TOTAL_FORMS': '1', 'verified_phones-INITIAL_FORMS': '0',
+            'verified_phones-MIN_NUM_FORMS': '0', 'verified_phones-MAX_NUM_FORMS': '1000',
+            'verified_phones-0-phone': '8 (999) 123-45-67', '_continue': '1',
+        })
+        self.assertEqual(response.status_code, 302, response.context and [
+            (inline.formset.errors, inline.formset.non_form_errors())
+            for inline in response.context['inline_admin_formsets']
+        ])
+        identity = VerifiedPhone.objects.get(user=target)
+        self.assertEqual(identity.phone, '+79991234567')
+        self.assertFalse(target.is_staff)
+        self.assertFalse(target.is_superuser)
+        self.assertContains(self.client.get('/admin/auth/user/'), '+79991234567')
+        response = self.client.post(f'/admin/auth/user/{target.pk}/change/', {
+            'username': target.username, 'email': target.email, 'is_active': 'on',
+            'date_joined_0': target.date_joined.date().isoformat(),
+            'date_joined_1': target.date_joined.time().strftime('%H:%M:%S'),
+            'verified_phones-TOTAL_FORMS': '2', 'verified_phones-INITIAL_FORMS': '1',
+            'verified_phones-MIN_NUM_FORMS': '0', 'verified_phones-MAX_NUM_FORMS': '1000',
+            'verified_phones-0-id': str(identity.pk), 'verified_phones-0-phone': identity.phone,
+            'verified_phones-1-phone': '+79991112233', '_continue': '1',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(VerifiedPhone.objects.get(pk=identity.pk).verified_at, identity.verified_at)
+        self.assertContains(self.client.get(f'/admin/auth/user/{target.pk}/change/'), '+79991112233')
+        self.assertEqual(VerifiedPhone.objects.filter(user=target).count(), 2)
+        self.client.logout()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(target)}')
+        profile = self.client.get('/api/v1/auth/me/')
+        self.assertEqual(profile.status_code, 200)
+        self.assertEqual(profile.data['phones'], ['+79991234567', '+79991112233'])
+
+    def test_staff_cannot_assign_phone_and_duplicate_phone_is_rejected(self):
+        User = get_user_model()
+        actor = User.objects.create_user('operator', 'operator@example.test', 'OperatorPassphrase#539', is_staff=True)
+        target = User.objects.create_user('client', 'client@example.test', 'ClientPassphrase#539')
+        owner = User.objects.create_user('owner', 'owner@example.test', 'OwnerPassphrase#539')
+        VerifiedPhone.objects.create(user=owner, phone='+79991234567', verified_at=timezone.now())
+        request = RequestFactory().post(f'/admin/auth/user/{target.pk}/change/')
+        request.user = actor
+        model_admin = admin.site._registry[User]
+        self.assertIn('phone_number', str(model_admin.get_fieldsets(request, target)))
+        self.assertEqual(model_admin.get_inline_instances(request, target), [])
+        form = AdminUserChangeForm({
+            'username': target.username, 'email': target.email, 'is_active': True,
+            'date_joined': target.date_joined, 'phone': '+79991112233',
+        }, instance=target)
+        self.assertTrue(form.is_valid(), form.errors)
+        model_admin.save_model(request, form.save(commit=False), form, change=True)
+        self.assertFalse(VerifiedPhone.objects.filter(user=target).exists())
+
+        form = VerifiedPhoneInlineForm({'phone': '+79991234567'}, instance=VerifiedPhone(user=target))
+        self.assertFalse(form.is_valid())
+        self.assertIn('phone', form.errors)

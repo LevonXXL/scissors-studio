@@ -13,7 +13,8 @@ from .identifiers import staff_name, yclients_id
 
 
 MASTER_FIELDS = (
-    'name', 'category', 'status', 'inn', 'is_system', 'position',
+    'name', 'price_level', 'status', 'inn', 'is_system',
+    'is_booking_placeholder', 'position',
 )
 PRICE_FIELDS = ('price_min', 'price_max', 'duration_seconds')
 
@@ -64,9 +65,7 @@ def reconcile_master_duplicate(canonical_id: int, duplicate_id: int, *, apply: b
             field for field in MASTER_FIELDS
             if getattr(canonical, field) != getattr(duplicate, field)
             and not (field == 'name' and matching_staff_id)
-            # A legacy duplicate may still have the default category while
-            # the identified record has the manually curated category.
-            and not (field == 'category' and duplicate.category == Master.CATEGORY_UNIVERSAL)
+            and not (field == 'price_level' and not duplicate.price_level)
         ]
         if differing_fields:
             raise UnsafeMasterMerge(f'Поля мастеров различаются: {", ".join(differing_fields)}.')
@@ -129,7 +128,7 @@ def reconcile_master_duplicate(canonical_id: int, duplicate_id: int, *, apply: b
             # Keep the identified, recently synced record's content where it
             # exists; recover older content only when its field is empty.
             recovered_fields = []
-            for field in ('specialization', 'bio', 'photo_id'):
+            for field in ('bio', 'photo_id'):
                 if not getattr(canonical, field) and getattr(duplicate, field):
                     setattr(canonical, field, getattr(duplicate, field))
                     recovered_fields.append(field)

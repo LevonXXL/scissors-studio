@@ -16,6 +16,7 @@ test('formats only filled fields using current form values', () => {
   assert.equal(formatFeedbackMessage({ name: '', phone: '', message: ' ' }), '');
   assert.match(new URL(messengerHref(byName('WhatsApp'), { ...draft, message: 'Новый вопрос' }, siteUrl)).searchParams.get('text'), /Новый вопрос/);
   assert.equal(formatFeedbackMessage({ name: 'Алексей', phone: '', message: ' ' }), '');
+  assert.match(formatFeedbackMessage({ name: '', phone: 'client@example.com', message: 'Вопрос' }), /Email: client@example.com/);
 });
 
 test('WhatsApp preserves support number and existing query while encoding text once', () => {

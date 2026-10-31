@@ -5,12 +5,14 @@
  */
 
 import { clientsClaim } from "workbox-core";
+import type { WorkboxPlugin } from "workbox-core";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import {
   cleanupOutdatedCaches,
-  createHandlerBoundToURL,
+  PrecacheFallbackPlugin,
   precacheAndRoute
 } from "workbox-precaching";
+import { NetworkOnly } from "workbox-strategies";
 
 declare const self: ServiceWorkerGlobalScope & typeof globalThis;
 
@@ -44,11 +46,14 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 if (import.meta.env.QUASAR_PROD) {
-  // Non-SSR/SSG fallbacks to index.html
-  // Production SSR/SSG fallbacks to offline.html (except for dev)
+  // Online navigations must reach SSR. The precached shell is for offline use.
   registerRoute(
     new NavigationRoute(
-      createHandlerBoundToURL(import.meta.env.QUASAR_PWA_FALLBACK_HTML),
+      new NetworkOnly({
+        plugins: [new PrecacheFallbackPlugin({
+          fallbackURL: import.meta.env.QUASAR_PWA_FALLBACK_HTML,
+        }) as WorkboxPlugin],
+      }),
       {
         denylist: [
           new RegExp(import.meta.env.QUASAR_PWA_SERVICE_WORKER_REGEX),

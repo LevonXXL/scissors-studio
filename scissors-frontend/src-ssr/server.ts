@@ -8,6 +8,7 @@
  */
 
 import express from "express";
+import { randomBytes } from "node:crypto";
 import type { Application, Request, Response } from "express";
 import type { Server } from "node:http";
 import {
@@ -36,6 +37,9 @@ export const create = defineSsrCreate(async (/* { ... } */) => {
   const siteUrl = import.meta.env.VITE_SITE_URL;
   const apiOrigin = new URL(import.meta.env.VITE_API_BASE_URL).origin;
   const mediaOrigin = new URL(import.meta.env.VITE_MEDIA_URL).origin;
+  const staticOrigin = import.meta.env.VITE_STATIC_URL
+    ? new URL(import.meta.env.VITE_STATIC_URL, siteUrl).origin
+    : siteUrl;
 
   app.get('/robots.txt', (_request, response) => {
     response.type('text/plain').send(
@@ -49,12 +53,28 @@ export const create = defineSsrCreate(async (/* { ... } */) => {
      * (https://helmetjs.github.io/)
      */
     const { default: helmet } = await import("helmet");
+    const mapsApi = 'https://api-maps.yandex.ru';
+    const mapsApiSubdomains = 'https://*.api-maps.yandex.ru';
+    const mapsTiles = 'https://*.maps.yandex.net';
+    const mapsAssets = 'https://yastatic.net';
+    const mapsSite = 'https://yandex.ru';
+    const mapsSuggest = 'https://suggest-maps.yandex.ru';
+    const metrika = 'https://mc.yandex.ru';
+    app.use((_req, res, next) => {
+      res.locals.cspNonce = randomBytes(16).toString('base64');
+      next();
+    });
     app.use(
       helmet({
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
         contentSecurityPolicy: {
           directives: {
-            connectSrc: ["'self'", apiOrigin],
-            imgSrc: ["'self'", "data:", apiOrigin, mediaOrigin],
+            scriptSrc: ["'self'", (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`, mapsApi, mapsApiSubdomains, mapsTiles, mapsAssets, mapsSite, mapsSuggest, metrika, "'unsafe-eval'"],
+            connectSrc: ["'self'", apiOrigin, mapsApi, mapsApiSubdomains, mapsTiles, mapsSite, mapsSuggest, metrika],
+            styleSrc: ["'self'", 'https:', 'blob:', "'unsafe-inline'", mapsApi, mapsApiSubdomains, mapsAssets, metrika],
+            imgSrc: ["'self'", "data:", apiOrigin, mediaOrigin, staticOrigin, mapsApi, mapsApiSubdomains, mapsTiles, mapsAssets, mapsSite, metrika],
+            frameSrc: ["'self'", mapsApi, metrika],
+            workerSrc: ["'self'", 'blob:', 'data:', mapsApi, mapsApiSubdomains, mapsAssets, metrika],
           },
         },
       }),

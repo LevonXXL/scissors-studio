@@ -83,7 +83,7 @@ class PushDeliveryResult:
     unavailable_reason: str | None = None
 
 
-def send_to_staff(title, body, url, *, superusers_only=False):
+def send_to_staff(title, body, url, *, superusers_only=False, required_permission=None):
     """Send one event to each enabled staff browser; keep delivery errors private."""
     result = PushDeliveryResult()
     config_error = push_configuration_error()
@@ -97,7 +97,7 @@ def send_to_staff(title, body, url, *, superusers_only=False):
         logger.warning('Web Push library is unavailable.')
         result.unavailable_reason = 'library_unavailable'
         return result
-    subscriptions = PushSubscription.objects.filter(
+    subscriptions = PushSubscription.objects.select_related('user').filter(
         user__is_active=True,
         user__is_staff=True,
         user__push_preference__enabled=True,
@@ -106,6 +106,8 @@ def send_to_staff(title, body, url, *, superusers_only=False):
         subscriptions = subscriptions.filter(user__is_superuser=True)
     payload = json.dumps({'title': title, 'body': body, 'url': url}, ensure_ascii=False)
     for subscription in subscriptions.iterator():
+        if required_permission and not subscription.user.has_perm(required_permission):
+            continue
         result.attempted += 1
         subscription_id = subscription.pk
         provider = None
@@ -157,7 +159,8 @@ def send_to_staff(title, body, url, *, superusers_only=False):
 def notify_new_feedback(feedback):
     try:
         url = reverse('admin:communications_feedbackrequest_change', args=[feedback.pk])
-        send_to_staff('Новое обращение', f'{feedback.name}: просьба перезвонить', url)
+        send_to_staff('Новое обращение', f'{feedback.name}: новое обращение', url,
+                      required_permission='communications.view_feedbackrequest')
     except Exception as exc:
         logger.warning(
             'Feedback push dispatch failed: feedback_id=%s error_type=%s errno=%s',

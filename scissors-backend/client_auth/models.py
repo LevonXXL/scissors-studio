@@ -3,7 +3,7 @@ from django.db import models
 
 
 class VerifiedPhone(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='verified_phone')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='verified_phones')
     phone = models.CharField(max_length=12, unique=True)
     verified_at = models.DateTimeField()
 

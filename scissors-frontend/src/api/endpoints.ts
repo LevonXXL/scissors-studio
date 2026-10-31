@@ -1,4 +1,43 @@
 import api  from '@/api/client';
+
+export interface SearchHit {
+  id: string;
+  type: 'page' | 'master' | 'salon' | 'category' | 'service';
+  title: string;
+  content: string;
+  url: string;
+}
+
+export interface SearchResponse {
+  data: SearchHit[];
+  pagination: { page: number; pageSize: number; totalCount: number };
+}
+
+export async function fetchSearch(query: string, page = 1, pageSize = 30): Promise<SearchResponse> {
+  const { data } = await api.get<SearchResponse>('/search', {
+    params: {
+      query,
+      'pagination.page': page,
+      'pagination.pageSize': pageSize,
+    },
+  });
+  return data;
+}
+
+export interface CatalogueCategorySummary {
+  id: number;
+  title: string;
+  code: string;
+  image_url: string;
+  image_path: string;
+  url_path: string;
+  meta_description: string;
+}
+
+export async function fetchCatalogueCategories(): Promise<CatalogueCategorySummary[]> {
+  const { data } = await api.get<PaginatedResponse<CatalogueCategorySummary> | CatalogueCategorySummary[]>('/service-categories/');
+  return Array.isArray(data) ? data : data.results;
+}
 import type { HomeReview, Master, PageDetail, PageListItem, PaginatedResponse, Review, ReviewSource, Salon } from '@/api/types';
 
 export async function fetchPageByPath(urlPath: string): Promise<PageDetail> {
@@ -73,6 +112,7 @@ export interface AuthResult {
   access: string;
   is_staff: boolean;
   phone: string;
+  phones: string[];
   email: string;
   pending_email: string;
   has_password: boolean;
@@ -82,6 +122,7 @@ export interface AuthResult {
 export interface AuthProfile {
   is_staff: boolean;
   phone: string;
+  phones: string[];
   email: string;
   pending_email: string;
   has_password: boolean;
@@ -118,6 +159,11 @@ export async function verifyAuthCode(phone: string, code: string): Promise<AuthR
   return data;
 }
 
+export async function verifyProfilePhone(phone: string, code: string): Promise<AuthProfile> {
+  const { data } = await api.post<AuthProfile>('/auth/phone/verify/', { phone, code });
+  return data;
+}
+
 export async function loginWithPassword(phone: string, password: string): Promise<AuthResult> {
   const { data } = await api.post<AuthResult>('/auth/login-password/', { phone, password });
   return data;
@@ -138,6 +184,49 @@ export async function verifyEmail(token: string): Promise<void> {
 
 export async function getAuthProfile(): Promise<AuthProfile> {
   const { data } = await api.get<AuthProfile>('/auth/me/');
+  return data;
+}
+
+export interface BookingOptions {
+  services: { id: number; title: string; category: string; master_ids: number[] }[];
+  masters: { id: number; name: string; slug: string }[];
+}
+
+export interface BookingRequestInput {
+  salon: number;
+  service_ids: number[];
+  preferred_master: number | null;
+  requested_start: string;
+  requested_end?: string | null;
+  name: string;
+  phone?: string;
+  comment?: string;
+}
+
+export async function fetchBookingOptions(salonId: number): Promise<BookingOptions> {
+  const { data } = await api.get<BookingOptions>('/booking-options/', { params: { salon: salonId } });
+  return data;
+}
+
+export async function createBookingRequest(values: BookingRequestInput): Promise<{ id: number; status: string; detail: string }> {
+  const { data } = await api.post<{ id: number; status: string; detail: string }>('/booking-requests/', values);
+  return data;
+}
+
+export interface MyBooking {
+  id: number;
+  salon: string;
+  master: string | null;
+  services: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  requested_start: string | null;
+  requested_end: string | null;
+  start_datetime: string | null;
+  end_datetime: string | null;
+}
+
+export async function fetchMyBookings(period: 'future' | 'past', page = 1): Promise<PaginatedResponse<MyBooking>> {
+  const { data } = await api.get<PaginatedResponse<MyBooking>>('/booking-requests/mine/', { params: { period, page } });
   return data;
 }
 
