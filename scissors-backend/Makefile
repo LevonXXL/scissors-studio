@@ -52,6 +52,7 @@ sync-dry-run:
 	git ls-remote origin refs/heads/main
 
 .PHONY: sync-prod
+# Deployment uses the shared Git helper; persistent Tilda assets live only in /home/scissors/static/tilda_assets.
 sync-prod:
 	@$(SCP_DEPLOY) $(DEPLOY_HELPER) $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/scissors-git-deploy.sh
 	@$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "chmod 0750 $(REMOTE_PATH)/scissors-git-deploy.sh && bash $(REMOTE_PATH)/scissors-git-deploy.sh deploy main"

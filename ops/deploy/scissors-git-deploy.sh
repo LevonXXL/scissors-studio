@@ -8,6 +8,7 @@ NODE_HOME="$ROOT/runtime/node-v22.23.5-linux-x64"
 REPOSITORY="$ROOT/repository"
 RELEASES="$ROOT/releases"
 CURRENT="$ROOT/current"
+TILDA_ASSETS="$ROOT/static/tilda_assets"
 REPO_URL=git@github.com:LevonXXL/scissors-studio.git
 GIT_SSH_COMMAND="ssh -i /etc/scissors/github_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 export GIT_SSH_COMMAND
@@ -63,17 +64,29 @@ if [[ ! -e "$RELEASE/.git" ]]; then
     git -C "$REPOSITORY" worktree add --detach "$RELEASE" "$COMMIT"
 fi
 
+if [[ ! -d "$TILDA_ASSETS" ]]; then
+    echo "Refusing deploy: canonical Tilda assets directory is missing: $TILDA_ASSETS" >&2
+    exit 1
+fi
+while IFS= read -r -d '' duplicate; do
+    if ! diff -qr --exclude=.DS_Store "$TILDA_ASSETS" "$duplicate" >/dev/null; then
+        echo "Refusing deploy: Tilda assets differ from canonical copy: $duplicate" >&2
+        exit 1
+    fi
+    rm -rf "$duplicate"
+done < <(find "$RELEASES" -type d -name tilda_assets -prune -print0)
+
 python3 -m venv "$RELEASE/scissors-backend/.venv"
 "$RELEASE/scissors-backend/.venv/bin/python" -m pip install --disable-pip-version-check -r "$RELEASE/scissors-backend/requirements.txt"
 
 cd "$RELEASE/scissors-frontend"
 export PATH="$NODE_HOME/bin:$PATH"
 "$NODE_HOME/bin/npm" ci --include=dev
-TILDA_ASSETS="$RELEASE/scissors-frontend/public/tilda_assets"
-TILDA_BUILD_HOLD="$RELEASE/.tilda-assets-build-hold"
-if [[ -d "$TILDA_ASSETS" ]]; then
-    mv "$TILDA_ASSETS" "$TILDA_BUILD_HOLD"
-fi
+RELEASE_TILDA_ASSETS="$RELEASE/scissors-frontend/public/tilda_assets"
+[[ ! -d "$RELEASE_TILDA_ASSETS" ]] || {
+    echo "Refusing deploy: Tilda assets unexpectedly appeared in the release after duplicate cleanup" >&2
+    exit 1
+}
 SITE_URL=https://studio.scissors.group \
 API_ORIGIN=https://api.studio.scissors.group \
 VITE_SITE_URL=https://studio.scissors.group \
@@ -81,9 +94,6 @@ VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
 VITE_STATIC_URL=https://studio.static.scissors.group/static/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
 "$NODE_HOME/bin/npm" run build -- -m ssr || BUILD_STATUS=$?
-if [[ -d "$TILDA_BUILD_HOLD" ]]; then
-    mv "$TILDA_BUILD_HOLD" "$TILDA_ASSETS"
-fi
 if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
 fi
@@ -97,7 +107,8 @@ if [[ ! -x "$RELEASE/scissors-backend/.venv/bin/gunicorn" || ! -f "$RELEASE/scis
     exit 1
 fi
 
-rsync -a --no-owner --no-group --no-times --no-perms "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
+rsync -a --no-owner --no-group --no-times --no-perms --exclude=/tilda_assets/ \
+    "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 chgrp -R scissors-runtime "$RELEASE"
 find "$RELEASE" -type d -exec chmod 0750 {} +
 find "$RELEASE" -type f -perm /111 -exec chmod 0750 {} +
