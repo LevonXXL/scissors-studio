@@ -28,6 +28,16 @@
         <h2 v-if="page.master" class="text-h5 q-mt-xl q-mb-md">Примеры работ</h2>
         <ImageGallery :images="pictures" class="q-mt-md" :ratio="4 / 3" />
       </template>
+      <section v-if="page.master && serviceWorkGalleries.length" class="q-mt-xl">
+        <h2 class="text-h5 q-mb-md">Работы по услугам</h2>
+        <div v-for="gallery in serviceWorkGalleries" :key="gallery.serviceId" class="q-mb-xl">
+          <h3 class="text-h6 q-mb-sm">
+            <router-link v-if="gallery.urlPath" :to="`/${gallery.urlPath}`">{{ gallery.title }}</router-link>
+            <template v-else>{{ gallery.title }}</template>
+          </h3>
+          <ImageGallery :images="gallery.images" :ratio="4 / 3" />
+        </div>
+      </section>
     </template>
     <div v-else-if="loading" class="text-center q-pa-xl">
       <q-spinner color="primary" size="3em" />
@@ -82,6 +92,26 @@ const pictures = computed(() => page.value?.pictures.filter((pic) => !!pic.image
   src: pic.image,
   alt: pic.alt || page.value?.title || '',
 })) ?? []);
+const serviceWorkGalleries = computed(() => {
+  const galleries = new Map<number, {
+    serviceId: number; title: string; urlPath: string;
+    images: { id: number; src: string; alt: string }[];
+  }>();
+  for (const photo of page.value?.master?.service_work_photos ?? []) {
+    if (!galleries.has(photo.service_id)) {
+      galleries.set(photo.service_id, {
+        serviceId: photo.service_id,
+        title: photo.service_title,
+        urlPath: photo.service_url_path,
+        images: [],
+      });
+    }
+    galleries.get(photo.service_id)?.images.push({
+      id: photo.id, src: photo.image, alt: photo.caption || photo.service_title,
+    });
+  }
+  return [...galleries.values()];
+});
 const loading = ref(false);
 
 // A client-only offline shell has no SSR state. Valid SSR pages skip this.

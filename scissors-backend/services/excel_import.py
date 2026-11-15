@@ -11,19 +11,17 @@ from zipfile import ZipFile
 from django.db import transaction
 
 from .models import Service, ServiceCategory, ServicePrice, ServiceSalon
+from .price_levels import HAIR_LEVELS, NAIL_LEVELS, LEVEL_LABELS
 from .price_sync import sync_offer_prices
+from .xlsx_security import reject_malformed_xlsx, validate_xlsx_archive, worksheet_path
 
 NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 LEVELS = {
-    'hair': [('B', 'universal'), ('C', 'modeler'), ('D', 'stylist'), ('E', 'top_stylist'), ('F', 'art_director')],
-    'nails': [('B', 'nail_master'), ('C', 'top_nail_master')],
+    'hair': list(zip('BCDEF', HAIR_LEVELS)),
+    'nails': list(zip('BC', NAIL_LEVELS)),
     'fixed': [('C', '')],
 }
-LABELS = dict((key, label) for key, label in [
-    ('universal', 'Универсал'), ('modeler', 'Модельер'), ('stylist', 'Стилист'),
-    ('top_stylist', 'Топ-стилист'), ('art_director', 'Арт-директор'),
-    ('nail_master', 'Мастер'), ('top_nail_master', 'Топ-мастер'), ('', 'Единая цена'),
-])
+LABELS = LEVEL_LABELS
 CATEGORIES = {
     'hair': ('Для волос', '/img/home/service-hair.png'),
     'nails': ('Для ногтей', '/img/home/service-nails.png'),
@@ -70,10 +68,12 @@ def validate_salon(preview, salon):
         raise ValueError('В салоне «Красные Ворота» доступен только парикмахерский зал.')
 
 
+@reject_malformed_xlsx
 def read_xlsx(data):
     if not data.startswith(b'PK'):
         raise ValueError('Ожидается файл XLSX.')
     with ZipFile(BytesIO(data)) as archive:
+        validate_xlsx_archive(archive, len(data))
         names = archive.namelist()
         if 'xl/workbook.xml' not in names:
             raise ValueError('В файле нет книги Excel.')
@@ -84,8 +84,7 @@ def read_xlsx(data):
         rel_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
         rels = {item.get('Id'): item.get('Target') for item in rel_root}
         sheet_rel = sheets[0].get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
-        target = rels[sheet_rel].lstrip('/')
-        sheet_path = target if target.startswith('xl/') else 'xl/' + target
+        sheet_path = worksheet_path(rels[sheet_rel])
         strings = []
         if 'xl/sharedStrings.xml' in names:
             strings = [''.join(t.text or '' for t in item.iter(NS + 't'))

@@ -107,7 +107,7 @@
           <q-item-section>Поиск</q-item-section>
         </q-item>
 
-        <q-expansion-item label="Услуги и цены" icon="content_cut" default-opened>
+        <q-expansion-item :label="pagesStore.byPath.uslugi?.link_title || 'Услуги'" icon="content_cut" default-opened>
           <q-item clickable to="/uslugi" v-close-popup>
             <q-item-section>Все услуги и цены</q-item-section>
           </q-item>
@@ -121,7 +121,7 @@
 
         <q-item clickable to="/team" v-close-popup>
           <q-item-section avatar><q-icon name="groups" /></q-item-section>
-          <q-item-section>Команда и портфолио</q-item-section>
+          <q-item-section>{{ pagesStore.byPath.team?.link_title || 'Команда' }}</q-item-section>
         </q-item>
 
         <q-expansion-item label="Салоны" icon="place">
@@ -132,7 +132,7 @@
 
         <q-item clickable to="/about" v-close-popup>
           <q-item-section avatar><q-icon name="info" /></q-item-section>
-          <q-item-section>О нас</q-item-section>
+          <q-item-section>{{ pagesStore.byPath.about?.link_title || 'О нас' }}</q-item-section>
         </q-item>
 
         <q-item clickable to="/login" v-close-popup>
@@ -144,6 +144,7 @@
 
     <q-page-container class="site-content">
       <InstallAppBanner />
+      <Breadcrumbs v-if="breadcrumbItems.length" :items="breadcrumbItems" class="site-page q-px-md q-pt-md" />
       <router-view />
       <footer class="site-footer q-pt-md">
         <div class="site-page q-px-md q-pb-lg">
@@ -203,35 +204,92 @@
   </q-layout>
 </template>
 
+<script lang="ts">
+import { definePreFetch } from '#q-app';
+import { useServiceCatalogStore } from '@/stores/serviceCatalog';
+import { usePagesStore } from '@/stores/pages-store';
+
+const staticPagePaths = new Set(['about', 'team', 'salons']);
+
+export default {
+  preFetch: definePreFetch(async ({ store, currentRoute }) => {
+    const path = currentRoute.path.replace(/^\/+|\/+$/g, '');
+    await Promise.all([
+      useServiceCatalogStore(store).loadRootCategories(),
+      ...(staticPagePaths.has(path) ? [usePagesStore(store).load(path)] : []),
+    ]);
+  }),
+};
+</script>
+
 <script setup lang="ts">
-import { onMounted, onUnmounted, onServerPrefetch, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { salons } from '@/data/salons';
 import ConsultationDialog from '@/components/ConsultationDialog.vue';
 import CookieSettingsDialog from '@/components/CookieSettingsDialog.vue';
 import InstallAppBanner from '@/components/InstallAppBanner.vue';
+import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import { messengerLinks } from '@/data/contacts';
 import { useAuthStore } from '@/stores/auth';
 import { useCookieStore } from '@/stores/cookies';
-import { useServiceCatalogStore } from '@/stores/serviceCatalog';
 import { useSalonStore } from '@/stores/salon';
+import { useSalonsStore } from '@/stores/salons';
+import type { PageBreadcrumb } from '@/api/types';
 import { publicAssetUrl } from '@/config/urls';
 import { YCLIENTS_NETWORK_BOOKING_URL } from '@/utils/yclientsBooking';
 
 const auth = useAuthStore();
 const cookieStore = useCookieStore();
 const salonStore = useSalonStore();
+const salonsStore = useSalonsStore();
+const pagesStore = usePagesStore();
 const router = useRouter();
+const currentPath = computed(() => router.currentRoute.value.path.replace(/^\/+|\/+$/g, ''));
+const staticBreadcrumbTitles: Record<string, string> = {
+  about: 'О нас', team: 'Команда', salons: 'Салоны',
+  vacancy: 'Вакансии', booking: 'Онлайн-запись',
+  login: 'Вход и профиль', search: 'Поиск', privacy: 'Политика конфиденциальности',
+};
+const breadcrumbItems = computed<PageBreadcrumb[]>(() => {
+  const path = currentPath.value;
+  if (!path) return [];
+  const salon = path.startsWith('salons/') ? salonsStore.bySlug[path.slice(7)] : null;
+  const page = salon?.page ?? pagesStore.byPath[path];
+  if (page?.breadcrumbs?.length) return page.breadcrumbs;
+  if (salon) return [
+    { link_title: 'Салоны', url_path: 'salons' },
+    { link_title: salon.name, url_path: path },
+  ];
+  const title = staticBreadcrumbTitles[path];
+  return title ? [{ link_title: title, url_path: path }] : [];
+});
 let removeRouteHook: (() => void) | undefined;
 
 onMounted(() => {
+  if (staticPagePaths.has(currentPath.value)) void pagesStore.load(currentPath.value);
+  sendPageView(router.currentRoute.value.path);
   salonStore.restoreSelection();
   void auth.restore();
   cookieStore.hit(router.currentRoute.value.path);
   cookieStore.loadFromStorage();
-  removeRouteHook = router.afterEach((to) => cookieStore.hit(to.path));
+  removeRouteHook = router.afterEach((to, _from, failure) => {
+    cookieStore.hit(to.path);
+    if (!failure) sendPageView(to.path);
+  });
 });
 onUnmounted(() => removeRouteHook?.());
+watch(currentPath, (path) => {
+  if (staticPagePaths.has(path)) void pagesStore.load(path);
+});
+
+function sendPageView(path: string) {
+  if (window.location.hostname !== 'scissors.group' || !navigator.sendBeacon) return;
+  if (/^\/(login|booking|search|admin|master-app)(\/|$)/.test(path)) return;
+  navigator.sendBeacon('/analytics/beacon/', new Blob(
+    [JSON.stringify({ path, ts: Date.now() })], { type: 'text/plain' },
+  ));
+}
 
 const drawerOpen = ref(false);
 const currentYear = new Date().getFullYear();
@@ -254,17 +312,9 @@ const serviceCatalog = useServiceCatalogStore();
 const servicesMenu = computed(() =>
   serviceCatalog.rootCategories.map((item) => ({
     href: `/${item.url_path}`,
-    label: item.title,
+    label: item.link_title || item.title,
   })),
 );
-
-async function ensureServicesMenu() {
-  if (!serviceCatalog.rootLoaded) {
-    await serviceCatalog.loadRootCategories();
-  }
-}
-
-onServerPrefetch(ensureServicesMenu);
 
 // const servicesMenu = ref<{ href: string; label: string }[]>([]);
 // const catalogueLoad = fetchCatalogueCategories().then((items) => {

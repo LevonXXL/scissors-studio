@@ -134,7 +134,7 @@ export const listen = defineSsrListen(
     const server = http.createServer((req, res) => {
       app(req, res);
     });
-    return server.listen(port, () => {
+    return server.listen(port, '127.0.0.1', () => {
       if (import.meta.env.QUASAR_PROD) {
         console.log(`🚀 Server listening at port ${port}`);
       }

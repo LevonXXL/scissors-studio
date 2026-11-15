@@ -53,17 +53,19 @@ class ServiceSerializer(serializers.ModelSerializer):
         result = []
         for assignment in obj.staff_prices.filter(salon=offer.salon, master__is_active=True,
                                                    master__is_system=False,
-                                                   master__is_booking_placeholder=False).select_related('master'):
+                                                   master__is_booking_placeholder=False).select_related('master', 'service'):
             level = assignment.master.price_level
             price = price_by_level.get(level) or price_by_level.get('')
             amount = price.amount if price else None
             result.append({'id': assignment.master_id, 'name': assignment.master.name,
-                           'level': level, 'amount': amount})
+                           'level': level, 'amount': amount,
+                           'duration_seconds': assignment.effective_duration_seconds})
         return result
 
 
 class ServiceCategorySerializer(serializers.ModelSerializer):
     url_path = serializers.CharField(source='page.url_path', read_only=True)
+    link_title = serializers.SerializerMethodField()
     meta_description = serializers.CharField(source='page.meta_description', read_only=True)
     image_url = serializers.SerializerMethodField()
     group_images = serializers.SerializerMethodField()
@@ -71,7 +73,10 @@ class ServiceCategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ServiceCategory
-        fields = ('id', 'title', 'code', 'image_url', 'group_images', 'image_path', 'weight', 'url_path', 'meta_description', 'services')
+        fields = ('id', 'title', 'link_title', 'code', 'image_url', 'group_images', 'image_path', 'weight', 'url_path', 'meta_description', 'services')
+
+    def get_link_title(self, obj):
+        return obj.page.effective_link_title if obj.page_id else obj.title
 
     def get_image_url(self, obj):
         if not obj.image_id:

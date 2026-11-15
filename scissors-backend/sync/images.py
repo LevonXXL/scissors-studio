@@ -10,14 +10,15 @@ be.cdn.yclients.com или assets.yclients.com), а иногда — тольк�
 
 from __future__ import annotations
 
-import hashlib
 import logging
+import secrets
 
 import requests
 from django.core.files.base import ContentFile
 
 from filer.models import Image as FilerImage
 
+from core_utils.remote_images import download_image
 from .models import SyncedImage
 
 logger = logging.getLogger(__name__)
@@ -57,28 +58,20 @@ def fetch_and_store_image(url: str | None, *, folder_name: str = 'yclients') -> 
         return cached.image
 
     try:
-        response = requests.get(normalized, timeout=20)
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        logger.warning('Не удалось скачать изображение %s: %s', normalized, exc)
+        data, extension = download_image(normalized)
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning('Не удалось скачать изображение: %s', type(exc).__name__)
         return None
 
-    filename = hashlib.md5(normalized.encode('utf-8')).hexdigest() + _guess_extension(normalized)
+    filename = secrets.token_hex(16) + extension
 
     filer_image = FilerImage.objects.create(
-        file=ContentFile(response.content, name=filename),
+        file=ContentFile(data, name=filename),
         original_filename=filename,
         folder=_get_or_create_folder(folder_name),
     )
     SyncedImage.objects.create(source_url=normalized, image=filer_image)
     return filer_image
-
-
-def _guess_extension(url: str) -> str:
-    for ext in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
-        if url.lower().split('?')[0].endswith(ext):
-            return ext
-    return '.jpg'
 
 
 def _get_or_create_folder(name: str):

@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% load unfold %}
+{% block content %}
+<div style="max-width:800px">
+  <p><a href="{% url 'admin:masters_master_change' master.pk %}">← Профиль мастера</a></p>
+  <p>Код подключает личный чат Telegram или MAX к этому мастеру. Передайте его только самому мастеру. Код действует 15 минут и используется один раз.</p>
+  <form method="post">{% csrf_token %}
+    {% component "unfold/components/button.html" with submit=1 name="action" value="generate" variant="primary" %}Создать код подключения{% endcomponent %}
+  </form>
+  {% if code %}<div style="margin:20px 0;padding:16px;border:1px solid #2563eb;border-radius:8px">
+    <strong>Код: {{ code }}</strong><br>
+    Отправьте боту в личном чате: <code>/link {{ code }}</code><br>
+    После ухода со страницы код больше не показывается.
+  </div>{% endif %}
+  <h2>Подключённые аккаунты</h2>
+  {% for account in accounts %}<div style="margin:12px 0">{{ account.get_platform_display }} · ID {{ account.external_user_id }}
+    <form method="post" style="display:inline">{% csrf_token %}
+      <input type="hidden" name="account_id" value="{{ account.pk }}">
+      {% component "unfold/components/button.html" with submit=1 name="action" value="disconnect" variant="danger" %}Отключить{% endcomponent %}
+    </form>
+  </div>{% empty %}<p>Пока нет подключённых аккаунтов.</p>{% endfor %}
+</div>
+{% endblock %}

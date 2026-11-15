@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils.html import format_html
 
 from core_utils.slugify_ru import slugify_ru
+from masters.constants import TEST_MASTER_SLUG_PREFIX
 from masters.models import Master
 from pages.models import Page
 from salons.models import Salon
@@ -303,14 +304,17 @@ class Command(BaseCommand):
 
         masters_added = 0
         for master in Master.objects.filter(is_active=True, is_system=False,
-                                             is_booking_placeholder=False).exclude(slug=''):
+                                             is_booking_placeholder=False).exclude(
+                                                 slug__startswith=TEST_MASTER_SLUG_PREFIX
+                                             ).exclude(slug=''):
             path = f'team/{master.slug}'
             page = master.page or Page.objects.filter(url_path=path).first() or Page.objects.filter(
                 parent=team, url=master.slug,
             ).first()
             if page and claimed_by_another(page, Master, master):
                 raise CommandError(f'Страница «{path}» уже связана с другой записью.')
-            before = (page.parent_id, page.url, page.content, page.url_path) if page else None
+            before = (page.parent_id, page.url, page.content, page.url_path,
+                      page.is_published) if page else None
             if page is None:
                 page = Page(
                     title=master.name, url=master.slug, parent=team,
@@ -318,9 +322,13 @@ class Command(BaseCommand):
                 )
                 masters_added += 1
             else:
+                generated_draft = page.parent_id is None and page.url == f'master-draft-{master.pk}'
                 page.parent = team
                 page.url = master.slug
-            if before is None or before[:3] != (page.parent_id, page.url, page.content) or page.url_path != path:
+                if generated_draft:
+                    page.is_published = True
+            if (before is None or before[:3] != (page.parent_id, page.url, page.content)
+                    or page.url_path != path or before[4] != page.is_published):
                 page.save()
             if master.page_id != page.pk:
                 master.page = page

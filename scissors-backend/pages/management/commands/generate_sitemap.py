@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
+from masters.constants import TEST_MASTER_SLUG_PREFIX
 from masters.models import Master
 from pages.models import Page
 from salons.models import Salon
@@ -25,7 +26,8 @@ def public_paths():
     )
     excluded_page_ids.update(
         Master.objects.filter(Q(is_active=False) | Q(yclients_user_id__isnull=True) |
-                              Q(is_booking_placeholder=True))
+                              Q(is_booking_placeholder=True) |
+                              Q(slug__startswith=TEST_MASTER_SLUG_PREFIX))
         .filter(page__isnull=False).values_list('page_id', flat=True)
     )
     excluded_page_ids.update(
@@ -40,7 +42,9 @@ def public_paths():
 
     # Home and price list have dedicated routes even if their Page records are absent.
     paths = {'', 'uslugi'}
-    for page_id, path in Page.objects.filter(is_published=True).values_list('id', 'url_path'):
+    for page_id, path in Page.objects.filter(is_published=True).exclude(
+        url__startswith=TEST_MASTER_SLUG_PREFIX
+    ).values_list('id', 'url_path'):
         if page_id not in excluded_page_ids and path not in {
             'login', 'policy', 'moscow', 'zelenograd', 'vacancy',
         } and not (path == 'services' or path.startswith('services/')):

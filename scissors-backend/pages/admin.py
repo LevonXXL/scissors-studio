@@ -44,11 +44,11 @@ class PageAdmin(DraggableMPTTAdmin):
     form = PageAdminForm
     list_display = ('tree_actions', 'indented_title', 'url_path', 'is_published', 'position')
     list_display_links = ('indented_title',)
-    search_fields = ('title', 'url', 'url_path')
+    search_fields = ('title', 'link_title', 'url', 'url_path')
     readonly_fields = ('url_path',)
     inlines = (PagePictureInline,)
     fieldsets = (
-        (None, {'fields': ('parent', 'title', 'content', 'is_published', 'position')}),
+        (None, {'fields': ('parent', 'title', 'link_title', 'content', 'is_published', 'position')}),
         ('SEO', {'fields': ('meta_title', 'meta_description', 'url', 'url_path')}),
     )
     widgets = {

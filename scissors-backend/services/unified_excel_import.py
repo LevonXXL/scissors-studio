@@ -14,7 +14,9 @@ from django.db.models import Q
 
 from .excel_import import CATEGORIES, NS, _normal, _text, capitalize_description
 from .models import Service, ServiceCategory, ServicePrice, ServiceSalon
+from .price_levels import HAIR_LEVELS, NAIL_LEVELS, LEVEL_LABELS
 from .price_sync import sync_offer_prices
+from .xlsx_security import reject_malformed_xlsx, validate_xlsx_archive, worksheet_path
 from salons.models import Salon
 
 REL = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id'
@@ -27,15 +29,6 @@ DIRECTIONS = {
     'Тело и SPA': 'cosmetology',
     'Удаление волос': 'epilation',
 }
-HAIR_LEVELS = ('universal', 'modeler', 'stylist', 'top_stylist', 'art_director')
-NAIL_LEVELS = ('nail_master', 'top_nail_master')
-LEVEL_LABELS = {
-    'universal': 'Универсал', 'modeler': 'Модельер', 'stylist': 'Стилист',
-    'top_stylist': 'Топ-стилист', 'art_director': 'Арт-директор',
-    'nail_master': 'Мастер', 'top_nail_master': 'Топ-мастер', '': 'Единая цена',
-}
-
-
 def _cells(row, strings):
     result = {}
     formulas = []
@@ -70,7 +63,7 @@ def _choose_sheet(archive, workbook, relationships, strings):
         if not match or sheet.get('state', 'visible') != 'visible':
             continue
         target = relationships[sheet.get(REL)].lstrip('/')
-        path = target if target.startswith('xl/') else f'xl/{target}'
+        path = worksheet_path(target)
         root = ET.fromstring(archive.read(path))
         first = root.find('.//' + NS + 'sheetData/' + NS + 'row')
         cells, _ = _cells(first, strings)
@@ -87,17 +80,20 @@ def is_unified_workbook(data):
         return False
     try:
         with ZipFile(BytesIO(data)) as archive:
+            validate_xlsx_archive(archive, len(data))
             workbook = ET.fromstring(archive.read('xl/workbook.xml'))
             return any(sheet.get('name', '').startswith('Единый прайс ')
                        for sheet in workbook.find(NS + 'sheets'))
-    except (BadZipFile, KeyError, ET.ParseError, OSError):
+    except (BadZipFile, KeyError, ET.ParseError, OSError, ValueError):
         return False
 
 
+@reject_malformed_xlsx
 def read_unified_xlsx(data):
     if not data.startswith(b'PK'):
         raise ValueError('Ожидается файл XLSX.')
     with ZipFile(BytesIO(data)) as archive:
+        validate_xlsx_archive(archive, len(data))
         workbook = ET.fromstring(archive.read('xl/workbook.xml'))
         relationships = {
             item.get('Id'): item.get('Target')

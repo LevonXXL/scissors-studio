@@ -119,6 +119,19 @@ class YClientsStaffLinkTests(TestCase):
         self.assertEqual(nail_master.price_level, 'nail_master')
         self.assertEqual(top_nail_master.price_level, 'top_nail_master')
 
+    def test_new_master_gets_exact_excel_level_from_yclients_position(self):
+        self._sync_entries([
+            {'id': 126, 'user_id': 459, 'name': 'Новый стилист',
+             'position': {'title': 'Топ-стилист'}},
+            {'id': 127, 'user_id': 460, 'name': 'Михаил Стець',
+             'position': {'title': 'Топ-стилист'}},
+            {'id': 128, 'user_id': 461, 'name': 'Косметолог',
+             'position': {'title': 'Косметолог-эстетист'}},
+        ])
+        self.assertEqual(Master.objects.get(yclients_user_id='459').price_level, 'top_stylist')
+        self.assertEqual(Master.objects.get(yclients_user_id='460').price_level, '')
+        self.assertEqual(Master.objects.get(yclients_user_id='461').price_level, '')
+
     def test_legacy_staff_id_identifies_existing_master_in_same_salon(self):
         master = Master.objects.create(name='Прежнее имя', yclients_staff_id='123')
         link = MasterSalon.objects.create(master=master, salon=self.salon, yclients_staff_id=None)

@@ -12,6 +12,7 @@ export interface MasterPrice {
   name: string;
   level: string;
   amount: string | null;
+  duration_seconds: number | null;
 }
 
 export interface Service {
@@ -21,6 +22,7 @@ export interface Service {
   group_title: string;
   subgroup_title: string;
   conditions: string;
+  duration_seconds: number | null;
   duration_display: string;
   url_path: string;
   image: string;
@@ -31,6 +33,7 @@ export interface Service {
 export interface Category {
   id: number;
   title: string;
+  link_title: string;
   code: string;
   image_url: string;
   image_path: string;

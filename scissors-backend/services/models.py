@@ -5,6 +5,7 @@ from filer.fields.image import FilerImageField
 from masters.models import Master
 from pages.models import Page, PagePicture
 from salons.models import Salon
+from .price_levels import LEVEL_LABELS, SERVICE_PRICE_LEVEL_CHOICES
 
 
 class ServiceCategory(models.Model):
@@ -100,7 +101,8 @@ class ServiceSalon(models.Model):
 
 class ServicePrice(models.Model):
     salon_service = models.ForeignKey(ServiceSalon, related_name='prices', on_delete=models.CASCADE)
-    level = models.CharField('Уровень (пусто для единой цены)', max_length=32, blank=True)
+    level = models.CharField('Уровень', max_length=32, blank=True,
+                             choices=SERVICE_PRICE_LEVEL_CHOICES)
     amount = models.DecimalField('Цена, ₽', max_digits=10, decimal_places=2)
 
     class Meta:
@@ -113,6 +115,11 @@ class ServicePrice(models.Model):
         if self.amount is None:
             raise ValidationError({'amount': 'Укажите цену, включая 0, если он задан в Excel.'})
 
+    def save(self, *args, **kwargs):
+        if self.level not in LEVEL_LABELS:
+            raise ValidationError({'level': 'Уровень отсутствует в Excel-прайсе.'})
+        super().save(*args, **kwargs)
+
 
 class ServiceStaffPrice(models.Model):
     """Explicit service assignment and optional individual override."""
@@ -122,6 +129,11 @@ class ServiceStaffPrice(models.Model):
     price_min = models.DecimalField('Индивидуальная цена от', max_digits=10, decimal_places=2, null=True, blank=True)
     price_max = models.DecimalField('Индивидуальная цена до', max_digits=10, decimal_places=2, null=True, blank=True)
     duration_seconds = models.PositiveIntegerField('Индивидуальная длительность, сек', null=True, blank=True)
+
+    @property
+    def effective_duration_seconds(self):
+        """Use the master's duration when set, otherwise the service default."""
+        return self.duration_seconds if self.duration_seconds is not None else self.service.duration_seconds
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('service', 'master', 'salon'), name='unique_service_master_salon')]
@@ -155,3 +167,24 @@ class ServiceStaffPrice(models.Model):
 
     def __str__(self):
         return f'{self.service} — {self.master}'
+
+
+class YClientsServiceMatch(models.Model):
+    """Reviewed mapping from a salon's YCLIENTS service to the Excel catalogue."""
+
+    salon = models.ForeignKey(Salon, on_delete=models.CASCADE, related_name='yclients_service_matches')
+    yclients_service_id = models.CharField('ID услуги YCLIENTS', max_length=32)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='yclients_matches')
+    source_title = models.CharField('Название в YCLIENTS', max_length=1024)
+    reviewed_at = models.DateTimeField('Проверено', auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=('salon', 'yclients_service_id', 'service'),
+            name='unique_yclients_service_match',
+        )]
+        verbose_name = 'Соответствие услуги YCLIENTS'
+        verbose_name_plural = 'Соответствия услуг YCLIENTS'
+
+    def __str__(self):
+        return f'{self.yclients_service_id} → {self.service}'

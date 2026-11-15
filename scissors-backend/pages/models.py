@@ -25,10 +25,14 @@ class Page(MPTTModel):
         ordering = ('position',)
 
     title = models.CharField('Заголовок', max_length=255)
+    link_title = models.CharField(
+        'Короткое название для меню и хлебных крошек', max_length=255, blank=True,
+        help_text='Если не заполнено — используется Заголовок.',
+    )
     content = CKEditor5Field('Содержание', config_name='default', blank=True)
 
     meta_title = models.CharField(
-        'Заголовок для <title>, хлебных крошек и меню',
+        'Заголовок для <title>',
         max_length=255, blank=True,
         help_text='Если не заполнено — используется Заголовок.',
     )
@@ -59,8 +63,12 @@ class Page(MPTTModel):
 
     @property
     def title_tag(self):
-        """Для <title>, хлебных крошек и меню — с фолбэком на title."""
+        """Заголовок браузера с фолбэком на title."""
         return self.meta_title or self.title
+
+    @property
+    def effective_link_title(self):
+        return self.link_title.strip() or self.title
 
     def _expected_url_path(self):
         if not self.parent_id:

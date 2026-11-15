@@ -28,6 +28,7 @@ class Command(BaseCommand):
         # Салоны, у которых есть хотя бы одна ссылка и ещё нет rewio_object_id
         salons = Salon.objects.filter(rewio_object_id='').filter(
             Q(yandex_maps_url__gt='') |
+            Q(google_maps_url__gt='') |
             Q(twogis_url__gt='') |
             Q(zoon_url__gt='')
         )
@@ -41,6 +42,7 @@ class Command(BaseCommand):
             links = [
                 url for url in (
                     salon.yandex_maps_url,
+                    salon.google_maps_url,
                     salon.twogis_url,
                     salon.zoon_url,
                 ) if url

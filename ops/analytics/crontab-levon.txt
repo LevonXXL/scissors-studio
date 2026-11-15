@@ -1,0 +1,4 @@
+# Install for the levon user after deploying code, migration and Angie config.
+5 * * * * cd /opt/scissors-backend && flock -n .analytics.lock .venv/bin/python manage.py aggregate_angie_logs
+20 0 * * * cd /opt/scissors-backend && flock -n .analytics.lock .venv/bin/python manage.py rollup_analytics
+40 0 * * * cd /opt/scissors-backend && flock -n .analytics.lock .venv/bin/python manage.py purge_analytics_events

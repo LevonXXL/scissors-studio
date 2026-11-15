@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+  .master-services { max-width: 1100px; }
+  .master-services section { margin: 24px 0 36px; }
+  .master-services table { width: 100%; border-collapse: collapse; }
+  .master-services th, .master-services td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  .master-services form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .master-services select { min-width: 340px; max-width: 100%; }
+  .master-services input[type=number] { width: 90px; }
+</style>
+<div class="master-services">
+  <p><a href="{% url 'admin:masters_master_change' master.pk %}">← Профиль мастера</a></p>
+  <p>Выбирайте только услуги, которые вы выполняете. Список и цены берутся из утверждённого Excel-прайса. Пустая длительность означает время услуги по умолчанию.</p>
+  {% for item in salons %}<section>
+    <h2>{{ item.salon.name }}</h2>
+    <table><thead><tr><th>Назначенная услуга</th><th>Длительность, минут</th><th>Действие</th></tr></thead><tbody>
+      {% for assignment in item.assigned %}<tr>
+        <td>{{ assignment.service.title }}{% if not assignment.admin_can_update %}<br><small>Нет в актуальных услугах этого салона</small>{% endif %}</td>
+        <td colspan="2"><form method="post">{% csrf_token %}
+          <input type="hidden" name="salon_id" value="{{ item.salon.pk }}">
+          <input type="hidden" name="service_id" value="{{ assignment.service_id }}">
+          {% if assignment.admin_can_update %}<input type="number" name="duration_minutes" min="1" step="1" value="{{ assignment.admin_duration_minutes|default_if_none:'' }}" aria-label="Длительность {{ assignment.service.title }}">{% endif %}
+          {% if assignment.duration_seconds and not assignment.admin_duration_minutes %}<small>Сейчас {{ assignment.duration_seconds }} сек; укажите целые минуты при изменении.</small>{% endif %}
+          {% if assignment.admin_can_update %}<button type="submit" name="action" value="update" class="button">Сохранить время</button>{% endif %}
+          <button type="submit" name="action" value="remove" class="button" formnovalidate>Убрать связь</button>
+        </form></td>
+      </tr>{% empty %}<tr><td colspan="3">Назначений пока нет.</td></tr>{% endfor %}
+    </tbody></table>
+    {% if item.available %}<h3>Добавить услугу</h3>
+      <form method="post">{% csrf_token %}
+        <input type="hidden" name="salon_id" value="{{ item.salon.pk }}">
+        <select name="service_id" required aria-label="Услуга в салоне {{ item.salon.name }}">
+          <option value="">Выберите услугу</option>
+          {% for offer in item.available %}<option value="{{ offer.service_id }}">{{ offer.service.category.title }} · {{ offer.service.title }}</option>{% endfor %}
+        </select>
+        <label>Минуты (необязательно) <input type="number" name="duration_minutes" min="1" step="1"></label>
+        <button type="submit" name="action" value="add" class="button default">Добавить связь</button>
+      </form>
+    {% endif %}
+  </section>{% empty %}<p>У мастера пока нет привязки к салону.</p>{% endfor %}
+</div>
+{% endblock %}

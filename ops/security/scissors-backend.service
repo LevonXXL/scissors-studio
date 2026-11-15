@@ -1,0 +1,48 @@
+[Unit]
+Description=Scissors Django backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=scissors-backend
+Group=scissors-runtime
+WorkingDirectory=/home/scissors/current/scissors-backend
+EnvironmentFile=/etc/scissors/backend.env
+EnvironmentFile=/etc/scissors/vapid.env
+Environment=SCISSORS_PRODUCTION=1
+Environment=DJANGO_SETTINGS_MODULE=scissors_studio.settings
+Environment=SITE_URL=https://studio.scissors.group
+Environment=STATIC_ROOT=/home/scissors/static
+Environment=MEDIA_ROOT=/home/scissors/media
+Environment=STATIC_URL=https://studio.static.scissors.group/static/
+Environment=MEDIA_URL=https://studio.static.scissors.group/media/
+Environment=FILE_UPLOAD_TEMP_DIR=/home/scissors/tmp
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/home/scissors/tmp
+ExecStartPre=/home/scissors/current/scissors-backend/.venv/bin/python manage.py migrate --noinput
+ExecStartPre=/home/scissors/current/scissors-backend/.venv/bin/python manage.py collectstatic --noinput
+ExecStart=/home/scissors/current/scissors-backend/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8553 --capture-output --error-logfile - --access-logfile - scissors_studio.wsgi:application
+Restart=always
+RestartSec=10
+UMask=0007
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+BindReadOnlyPaths=/home/scissors/current:/home/scissors/current
+BindPaths=/home/scissors/media:/home/scissors/media
+BindPaths=/home/scissors/static:/home/scissors/static
+BindPaths=/home/scissors/tmp:/home/scissors/tmp
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scissors-backend
+
+[Install]
+WantedBy=multi-user.target

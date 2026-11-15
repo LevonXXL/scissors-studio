@@ -4,6 +4,7 @@ from core_utils.drf_fields import FilerImageUrlField
 
 from salons.models import Salon
 
+from .constants import TEST_MASTER_SLUG_PREFIX
 from .models import Master, MasterSalon
 
 
@@ -44,7 +45,7 @@ class MasterViewSet(viewsets.ReadOnlyModelViewSet):
         is_active=True,
         yclients_user_id__isnull=False,
         is_booking_placeholder=False,
-    ).prefetch_related('master_salons__salon')
+    ).exclude(slug__startswith=TEST_MASTER_SLUG_PREFIX).prefetch_related('master_salons__salon')
     serializer_class = MasterSerializer
     lookup_field = 'slug'
 

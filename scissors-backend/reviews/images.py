@@ -1,25 +1,15 @@
 
-import hashlib
 import logging
-from pathlib import Path
-from urllib.parse import urlparse
+import secrets
 
 import requests
 from django.core.files.base import ContentFile
 from filer.models import Folder, Image as FilerImage
 
+from core_utils.remote_images import download_image
 from .models import ReviewImage
 
 logger = logging.getLogger(__name__)
-
-MAX_IMAGE_SIZE = 15 * 1024 * 1024
-ALLOWED_CONTENT_TYPES = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/webp': '.webp',
-    'image/gif': '.gif',
-}
-
 
 def get_review_folder():
     folder, _ = Folder.objects.get_or_create(
@@ -34,11 +24,6 @@ def fetch_review_image(review, url, position):
     if not url:
         return None
 
-    parsed = urlparse(url)
-    if parsed.scheme != 'https' or not parsed.hostname:
-        logger.warning('Пропущен недопустимый URL фото отзыва: %s', url)
-        return None
-
     cached = (
         ReviewImage.objects
         .filter(review=review, source_url=url)
@@ -49,49 +34,16 @@ def fetch_review_image(review, url, position):
         return cached
 
     try:
-        with requests.get(
-            url,
-            timeout=20,
-            stream=True,
-            headers={'User-Agent': 'ScissorsStudio/1.0'},
-        ) as response:
-            response.raise_for_status()
-
-            content_type = (
-                response.headers.get('Content-Type', '')
-                .split(';')[0].strip().lower()
-            )
-            extension = ALLOWED_CONTENT_TYPES.get(content_type)
-            if not extension:
-                logger.warning(
-                    'Неподдерживаемый тип фото отзыва %s: %s',
-                    url, content_type,
-                )
-                return None
-
-            length = response.headers.get('Content-Length')
-            if length and int(length) > MAX_IMAGE_SIZE:
-                logger.warning('Фото отзыва слишком большое: %s', url)
-                return None
-
-            chunks = []
-            size = 0
-            for chunk in response.iter_content(chunk_size=64 * 1024):
-                size += len(chunk)
-                if size > MAX_IMAGE_SIZE:
-                    logger.warning('Фото отзыва превышает лимит: %s', url)
-                    return None
-                chunks.append(chunk)
-
+        data, extension = download_image(url)
     except (requests.RequestException, ValueError) as exc:
-        logger.warning('Не удалось скачать фото отзыва %s: %s', url, exc)
+        logger.warning('Не удалось скачать фото отзыва: %s', type(exc).__name__)
         return None
 
-    filename = hashlib.sha256(url.encode('utf-8')).hexdigest() + extension
+    filename = secrets.token_hex(16) + extension
 
     try:
         filer_image = FilerImage.objects.create(
-            file=ContentFile(b''.join(chunks), name=filename),
+            file=ContentFile(data, name=filename),
             original_filename=filename,
             folder=get_review_folder(),
         )
@@ -106,5 +58,5 @@ def fetch_review_image(review, url, position):
             filer_image.delete()
             raise
     except Exception:
-        logger.exception('Не удалось сохранить фото отзыва %s', url)
+        logger.exception('Не удалось сохранить фото отзыва (id=%s)', review.pk)
         return None

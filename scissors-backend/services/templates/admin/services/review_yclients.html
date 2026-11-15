@@ -1,0 +1,127 @@
+{% extends "admin/base_site.html" %}
+{% load static unfold %}
+{% block content %}
+<style>
+  .review-intro { max-width: 1000px; margin: 16px 0 24px; }
+  .review-scroll { overflow: auto; max-height: 75vh; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .review-table { width: 100%; min-width: 1150px; border-collapse: separate; border-spacing: 0; }
+  .review-table th, .review-table td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #d1d5db; }
+  .review-table thead th { position: sticky; top: 0; background: #f3f4f6; z-index: 1; }
+  .review-table tr:target td { background: #ffd9d4; }
+  .review-table tr { scroll-margin-top: 64px; }
+  .review-problem td { background: #fff1f0; }
+  .dark .review-problem td { background: #4a2020; }
+  .review-problems { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
+  .review-problems a { padding: 6px 10px; border: 1px solid #f97066; border-radius: 8px; color: #b42318; text-decoration: none; }
+  .review-status { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; font-weight: 700; }
+  .review-good { background: #d1fadf; color: #067647; }
+  .review-bad { background: #fee4e2; color: #b42318; }
+  .review-saved { background: #dbeafe; color: #1d4ed8; }
+  .review-warning { color: #b42318; font-weight: 600; }
+  .review-choice { display: block; margin: 5px 0; }
+  .review-choice input { margin-right: 5px; }
+  .review-search { width: 100%; max-width: 390px; padding: 8px; border: 1px solid #9ca3af; border-radius: 6px; }
+  .review-search-results { max-width: 390px; max-height: 210px; overflow: auto; margin: 4px 0; padding: 0; list-style: none; border: 1px solid #d1d5db; border-radius: 6px; }
+  .review-search-results:empty { display: none; }
+  .review-search-results button { display: block; width: 100%; padding: 8px; text-align: left; }
+  .review-search-results button:hover, .review-search-results button:focus { background: #dbeafe; }
+  .review-picked { display: flex; flex-wrap: wrap; gap: 6px; max-width: 390px; margin: 8px 0; }
+  .review-picked button { padding: 5px 8px; border: 1px solid #6b7280; border-radius: 6px; }
+  .review-form button { margin-top: 10px; }
+  .review-meta { color: #6b7280; font-size: 12px; }
+  .review-ai { color: #7c3aed; font-weight: 600; }
+  .review-bulk { display: flex; gap: 12px; align-items: center; margin: 14px 0; }
+  .review-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+  .review-filters a { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; text-decoration: none; }
+  .review-filters a[aria-current="page"] { background: #1d4ed8; border-color: #1d4ed8; color: white; }
+  .review-staff { max-height: 170px; overflow: auto; }
+  .review-staff li { margin: 5px 0; }
+</style>
+
+<div class="review-intro">
+  <p>Загрузите услуги YCLIENTS для сверки с каталогом Excel. Загрузка показывает предпросмотр и не меняет базу данных.</p>
+  <form method="post" action="{% url 'admin:services_service_review_yclients' %}?filter={{ active_filter }}">{% csrf_token %}
+    {% component "unfold/components/button.html" with submit=1 name="fetch" value=1 variant="primary" %}Получить данные YCLIENTS{% endcomponent %}
+  </form>
+  <details><summary>Как работает сверка</summary>
+    <p>Источник услуг и цен — Excel. Из YCLIENTS не создаются услуги и не переносятся цены. Сохраняются соответствия существующих услуг, их свободные ID YCLIENTS и недостающие назначения мастеров. Повторное сохранение добавляет выбранные соответствия; снятие галочки не удаляет ранее сохранённое. Длительность YCLIENTS записывается только для новой связи, когда отличается от длительности услуги.</p>
+    <p>Предложения ИИ основаны на сравнении названий из текущей выгрузки и каталога. Они не отмечены автоматически: проверьте смысл, длину волос и доступность услуги в салоне.</p>
+  </details>
+</div>
+
+{% if total_count %}
+<nav class="review-filters" aria-label="Фильтры услуг YCLIENTS">
+  <a href="{% url 'admin:services_service_review_yclients' %}"{% if active_filter == 'all' %} aria-current="page"{% endif %}>Все · {{ total_count }}</a>
+  <a href="{% url 'admin:services_service_review_yclients' %}?filter=problems"{% if active_filter == 'problems' %} aria-current="page"{% endif %}>Только проблемные · {{ problem_count }}</a>
+  <a href="{% url 'admin:services_service_review_yclients' %}?filter=unassigned"{% if active_filter == 'unassigned' %} aria-current="page"{% endif %}>Без назначений · {{ unassigned_count }}</a>
+</nav>
+<p>Показано: {{ rows|length }} из {{ total_count }}. Готовы к применению: {{ ready_count }}; сохранены: {{ saved_count }}; требуют решения: {{ problem_count }}.</p>
+{% endif %}
+{% if rows %}
+<form method="post" action="{% url 'admin:services_service_review_yclients' %}?filter={{ active_filter }}" id="review-bulk-form" class="review-bulk">{% csrf_token %}
+  <button type="button" id="review-select-ready" class="font-medium px-3 py-2 border rounded-default cursor-pointer">Выбрать предложенные</button>
+  <button type="button" id="review-clear-ready" class="font-medium px-3 py-2 border rounded-default cursor-pointer">Снять выбор</button>
+  {% component "unfold/components/button.html" with submit=1 name="apply_selected" value=1 variant="primary" %}Применить выбранные строки{% endcomponent %}
+</form>
+<p class="review-meta">Зелёный статус означает «можно применить». Галочка слева выбирает строку для кнопки «Применить выбранные строки» наверху. Кнопка «Сохранить строку» справа использует только выбранные услуги в этой строке. После сохранения статус меняется на синий «Сохранено».</p>
+{% if problem_rows %}<nav class="review-problems" aria-label="Строки с расхождениями">
+  {% for row in problem_rows %}<a href="#row-{{ row.key|slugify }}">{{ row.salon.name }} · #{{ row.source_id }}</a>{% endfor %}
+</nav>{% endif %}
+<div class="review-scroll"><table class="review-table"><thead><tr>
+  <th>Применить / статус</th>
+  <th>Салон / услуга YCLIENTS</th>
+  <th>Мастера YCLIENTS → БД</th>
+  <th>Услуги каталога и сохранение</th>
+</tr></thead><tbody>
+{% for row in rows %}
+<tr id="row-{{ row.key|slugify }}"{% if row.status == 'problem' %} class="review-problem"{% endif %}>
+  <td><span class="review-status {% if row.status == 'ready' %}review-good{% elif row.status == 'saved' %}review-saved{% else %}review-bad{% endif %}" aria-label="{% if row.status == 'ready' %}Готова к применению{% elif row.status == 'saved' %}Сохранена{% else %}Требует решения{% endif %}">{% if row.status == 'problem' %}⊘{% else %}✓{% endif %}</span><br>
+    {% if row.status == 'ready' %}<label><input type="checkbox" class="review-ready-checkbox" name="selected_rows" value="{{ row.key }}" form="review-bulk-form" aria-label="Применить услугу #{{ row.source_id }}"> Применить группой</label>
+    {% elif row.status == 'saved' %}<small>Сохранено</small>{% else %}<small>Требует решения</small>{% endif %}
+  </td>
+  <td><strong>{{ row.salon }}</strong><br>#{{ row.source_id }} — {{ row.title }}
+    <div class="review-meta">Категория YCLIENTS: {{ row.category_id|default:'—' }}</div>
+    <div class="review-meta">Основание предложения: {{ row.reason }}</div>
+    {% if row.saved_ids %}<div>Подтверждённых услуг БД: {{ row.saved_ids|length }}</div>{% endif %}
+  </td>
+  <td>
+    {% if row.unresolved %}<div class="review-warning">Есть мастера без связи с БД. Сохранение заблокировано.</div>{% endif %}
+    {% if not row.active_staff_count %}<div class="review-warning">Нет действующих мастеров для назначения.</div>{% endif %}
+    <details><summary>Мастера: {{ row.staff_preview|length }}; готовы: {{ row.active_staff_count }}</summary>
+      <ul class="review-staff">
+      {% for member in row.staff_preview %}
+        <li>#{{ member.id }} {{ member.name }} → {% if member.master %}#{{ member.master.pk }} {{ member.master.name }}{% else %}—{% endif %}
+          {% if member.duration_seconds %} · {{ member.duration_seconds }} сек{% endif %}
+          <br><small{% if member.state != 'Готово' %} class="review-warning"{% endif %}>{{ member.state }}</small></li>
+      {% empty %}<li>В YCLIENTS нет назначенных мастеров.</li>{% endfor %}
+      </ul>
+    </details>
+  </td>
+  <td>
+    <form method="post" action="{% url 'admin:services_service_review_yclients' %}?filter={{ active_filter }}" class="review-form">{% csrf_token %}
+      <input type="hidden" name="row_key" value="{{ row.key }}">
+      {% for candidate in row.candidates %}
+        <label class="review-choice"><input type="checkbox" name="target_id" value="{{ candidate.pk }}" {% if candidate.pk in row.suggested_ids %}checked{% endif %}>
+          #{{ candidate.pk }} {{ candidate.title }}{% if candidate.pk in row.ai_ids %} <span class="review-ai">Предложение ИИ · проверить</span>{% endif %}{% if candidate.pk in row.saved_ids %} ✓{% endif %}</label>
+      {% empty %}<div class="review-meta">Совпадений по названию нет.</div>{% endfor %}
+      <div class="review-service-picker" data-salon-id="{{ row.salon_id }}">
+        <label for="unlinked-{{ forloop.counter }}">Найти другую услугу Excel без ID YCLIENTS:</label><br>
+        <input id="unlinked-{{ forloop.counter }}" type="search" class="review-search" autocomplete="off" placeholder="Введите минимум 3 символа" aria-label="Поиск услуг Excel">
+        <div class="review-meta review-search-hint" role="status">Введите 3 символа для поиска по услугам этого салона.</div>
+        <ul class="review-search-results"></ul>
+        <div class="review-picked" aria-label="Выбранные дополнительные услуги"></div>
+      </div>
+      <div class="review-meta">Если в Excel услуги нет, оставьте строку без сохранения. Перед выбором другой услуги снимите галочку с неверного предложения выше.</div>
+      <div class="review-meta">ID YCLIENTS записывается в услугу только при выборе одной услуги и свободном ID. Другие подтверждённые пары сохраняются отдельно по салону.</div>
+      {% if row.unresolved or not row.active_staff_count %}<button type="submit" disabled class="font-medium px-3 py-2 border rounded-default opacity-50">Сохранить строку</button>
+      {% else %}{% component "unfold/components/button.html" with submit=1 name="save_row" value=1 variant="primary" %}Сохранить строку{% endcomponent %}{% endif %}
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{{ unlinked_by_salon|json_script:"review-unlinked-services" }}
+<script src="{% static 'services/js/yclients_review.js' %}" defer></script>
+{% elif total_count %}<p>По выбранному фильтру строк нет.</p>
+{% endif %}
+{% endblock %}

@@ -24,7 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Монорепозиторий: .env лежит на два уровня выше settings.py
 # scissors-backend/scissors_backend/scissors_studio/settings.py → корень монорепо
 MONOREPO_ROOT = BASE_DIR.parent
-load_dotenv('.env')
+if os.environ.get('SCISSORS_PRODUCTION') != '1':
+    load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -37,13 +38,20 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Public origins are configured once per deployment; SITE_URL is shared with
 # the frontend build, while STATIC_URL and MEDIA_URL can point to a CDN.
 SITE_URL = (os.environ.get('SITE_URL') or os.environ.get('FRONTEND_BASE_URL')
-            or ('http://localhost:9100' if DEBUG else 'https://scissors.group')).rstrip('/')
+            or ('http://localhost:9100' if DEBUG else 'https://studio.scissors.group')).rstrip('/')
 
 API_ORIGIN = os.environ.get('API_ORIGIN', 'http://localhost:8000' if DEBUG else 'https://api.studio.scissors.group').rstrip('/')
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1,scissors.group,scissors-studio.online,api.studio.scissors.group,static.scissors-studio.online,admin.studio.scissors.group', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1,scissors.group,studio.scissors.group,scissors-studio.online,api.studio.scissors.group,studio.static.scissors.group,admin.studio.scissors.group', cast=Csv())
 
-CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+if os.environ.get('SCISSORS_PRODUCTION') == '1':
+    CORS_ALLOW_ALL_ORIGINS = False
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 3600
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 # Application definition
 
 INSTALLED_APPS = [
@@ -74,6 +82,7 @@ INSTALLED_APPS = [
     'client_auth',
     'communications',
     'search',
+    'analytics',
 ]
 
 UNFOLD = {
@@ -195,11 +204,33 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = os.environ.get('STATIC_URL', 'https://static.scissors-studio.online/static/' if not DEBUG else '/static/')
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = os.environ.get('STATIC_URL', 'https://studio.static.scissors.group/static/' if not DEBUG else '/static/')
+STATIC_ROOT = Path(os.environ.get('STATIC_ROOT', BASE_DIR / 'staticfiles'))
 
-MEDIA_URL = os.environ.get('MEDIA_URL', 'https://static.scissors-studio.online/media/' if not DEBUG else '/media/')
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = os.environ.get('MEDIA_URL', 'https://studio.static.scissors.group/media/' if not DEBUG else '/media/')
+MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', BASE_DIR / 'media'))
+FILE_UPLOAD_TEMP_DIR = os.environ.get('FILE_UPLOAD_TEMP_DIR') or None
+FILE_UPLOAD_PERMISSIONS = 0o640
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o750
+FILE_UPLOAD_HANDLERS = [
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'core_utils.upload_handlers.ScissorsTemporaryFileUploadHandler',
+]
+CKEDITOR_5_FILE_UPLOAD_PERMISSION = 'staff'
+CKEDITOR_5_MAX_FILE_SIZE = 10
+CKEDITOR_5_UPLOAD_FILE_TYPES = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+
+# Staff bots stay disabled until their tokens and webhook secrets are configured.
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
+TELEGRAM_WEBHOOK_SECRET = config('TELEGRAM_WEBHOOK_SECRET', default='')
+TELEGRAM_PROXY_URL = config('TELEGRAM_PROXY_URL', default='')
+TELEGRAM_MINI_APP_URL = config('TELEGRAM_MINI_APP_URL', default=f'{SITE_URL}/master-app')
+TELEGRAM_WEBHOOK_URL = config(
+    'TELEGRAM_WEBHOOK_URL',
+    default=f'{API_ORIGIN}/webhooks/staff/telegram/',
+)
+MAX_BOT_TOKEN = config('MAX_BOT_TOKEN', default='')
+MAX_WEBHOOK_SECRET = config('MAX_WEBHOOK_SECRET', default='')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -262,7 +293,8 @@ THUMBNAIL_PROCESSORS = (
 # Keep the configured public site reachable when the frontend host changes.
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     SITE_URL,
-    *config('CORS_ALLOWED_ORIGINS', default='http://localhost:9000,http://localhost:9200', cast=Csv()),
+    *config('CORS_ALLOWED_ORIGINS', default=('' if os.environ.get('SCISSORS_PRODUCTION') == '1'
+                                            else 'http://localhost:9000,http://localhost:9200'), cast=Csv()),
 ]))
 CORS_ALLOW_CREDENTIALS = True
 

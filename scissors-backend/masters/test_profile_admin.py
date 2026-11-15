@@ -12,7 +12,9 @@ from PIL import Image
 from communications.models import FeedbackRequest
 from pages.models import Page
 from pages.models import PagePicture
-from .models import Master
+from salons.models import Salon
+from services.models import Service, ServiceCategory, ServicePrice, ServiceSalon, ServiceStaffPrice
+from .models import Master, MasterSalon, MasterServiceWorkPhoto
 
 
 class MasterProfileAdminTests(TestCase):
@@ -92,10 +94,128 @@ class MasterProfileAdminTests(TestCase):
 
     def test_technician_without_master_keeps_admin_access(self):
         self.client.force_login(self.technician)
-        self.assertEqual(self.client.get(reverse('admin:masters_master_change',
+        response = self.client.get(reverse('admin:masters_master_change', args=[self.master.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Редактировать услуги и длительность')
+        self.assertContains(response, 'назначений: 0')
+        self.assertEqual(self.client.get(reverse('admin:masters_master_services',
                                                       args=[self.master.pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('admin:pages_page_change',
                                                       args=[self.page.pk])).status_code, 200)
+
+    def test_superuser_can_attach_master_to_salon_in_change_form(self):
+        salon = Salon.objects.create(name='Новый салон', address='Адрес', latitude=55, longitude=37)
+        self.client.force_login(self.technician)
+        url = reverse('admin:masters_master_change', args=[self.master.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        formset = response.context['inline_admin_formsets'][0].formset
+        self.assertEqual(len(formset.forms), 1)
+        self.assertFalse(formset.forms[0].fields['salon'].disabled)
+        self.assertTrue(formset.forms[0].fields['yclients_staff_id'].disabled)
+        self.assertContains(response, 'Выберите салон, в котором работает мастер.')
+        self.assertContains(response, 'Заполняется при синхронизации')
+        self.assertContains(response, 'Необязательная прямая ссылка на запись')
+
+        prefix = formset.prefix
+        response = self.client.post(url, {
+            'name': self.master.name, 'status': self.master.status,
+            'slug': self.master.slug, 'page': self.page.pk,
+            'user': self.staff.pk, 'is_active': 'on', 'position': 0,
+            f'{prefix}-TOTAL_FORMS': 1,
+            f'{prefix}-INITIAL_FORMS': 0,
+            f'{prefix}-MIN_NUM_FORMS': 0,
+            f'{prefix}-MAX_NUM_FORMS': 1000,
+            f'{prefix}-0-salon': salon.pk,
+            f'{prefix}-0-yclients_booking_url': '',
+            '_save': 'Сохранить',
+        })
+        self.assertEqual(response.status_code, 302)
+        link = MasterSalon.objects.get(master=self.master, salon=salon)
+        self.assertIsNone(link.yclients_staff_id)
+
+        response = self.client.get(url)
+        formset = response.context['inline_admin_formsets'][0].formset
+        self.assertTrue(formset.forms[0].fields['salon'].disabled)
+        self.assertFalse(formset.forms[1].fields['salon'].disabled)
+
+    def test_master_can_manage_only_own_service_assignments(self):
+        salon = Salon.objects.create(name='Салон', address='Адрес', latitude=55, longitude=37)
+        category = ServiceCategory.objects.create(title='Стрижки', code='profile-services')
+        service = Service.objects.create(category=category, title='Стрижка',
+                                         duration_seconds=3600, price_code='MASTER-1')
+        offer = ServiceSalon.objects.create(service=service, salon=salon)
+        ServicePrice.objects.create(salon_service=offer, level='', amount=2000)
+        MasterSalon.objects.create(master=self.master, salon=salon)
+        MasterSalon.objects.create(master=self.other_master, salon=salon)
+        own_url = reverse('admin:masters_master_services', args=[self.master.pk])
+        other_url = reverse('admin:masters_master_services', args=[self.other_master.pk])
+        self.client.force_login(self.staff)
+        self.assertContains(self.client.get(own_url), 'Стрижка')
+        self.assertEqual(self.client.get(other_url).status_code, 404)
+        self.assertEqual(self.client.post(other_url, {
+            'action': 'add', 'salon_id': salon.pk, 'service_id': service.pk,
+        }).status_code, 404)
+        self.assertEqual(self.client.post(own_url, {
+            'action': 'add', 'salon_id': salon.pk, 'service_id': service.pk,
+            'duration_minutes': '50',
+        }).status_code, 302)
+        assignment = ServiceStaffPrice.objects.get(master=self.master, salon=salon, service=service)
+        self.assertEqual(assignment.duration_seconds, 3000)
+        self.assertFalse(ServiceStaffPrice.objects.filter(master=self.other_master).exists())
+        self.assertEqual(self.client.post(own_url, {
+            'action': 'update', 'salon_id': salon.pk, 'service_id': service.pk,
+            'duration_minutes': '',
+        }).status_code, 302)
+        assignment.refresh_from_db()
+        self.assertIsNone(assignment.duration_seconds)
+        self.assertEqual(assignment.effective_duration_seconds, 3600)
+        self.assertEqual(self.client.post(own_url, {
+            'action': 'remove', 'salon_id': salon.pk, 'service_id': service.pk,
+        }).status_code, 302)
+        self.assertFalse(ServiceStaffPrice.objects.filter(master=self.master).exists())
+
+    def test_master_can_remove_old_assignment_but_not_add_inactive_offer(self):
+        salon = Salon.objects.create(name='Салон', address='Адрес', latitude=55, longitude=37)
+        category = ServiceCategory.objects.create(title='Стрижки', code='profile-old')
+        service = Service.objects.create(category=category, title='Старая услуга',
+                                         price_code='MASTER-2')
+        ServiceSalon.objects.create(service=service, salon=salon, is_active=False)
+        MasterSalon.objects.create(master=self.master, salon=salon)
+        assignment = ServiceStaffPrice.objects.create(master=self.master, salon=salon, service=service)
+        url = reverse('admin:masters_master_services', args=[self.master.pk])
+        self.client.force_login(self.staff)
+        self.assertContains(self.client.get(url), 'Нет в актуальных услугах этого салона')
+        self.assertEqual(self.client.post(url, {
+            'action': 'remove', 'salon_id': salon.pk, 'service_id': service.pk,
+        }).status_code, 302)
+        self.assertFalse(ServiceStaffPrice.objects.filter(pk=assignment.pk).exists())
+        self.assertEqual(self.client.post(url, {
+            'action': 'add', 'salon_id': salon.pk, 'service_id': service.pk,
+        }).status_code, 200)
+        self.assertFalse(ServiceStaffPrice.objects.filter(master=self.master).exists())
+
+    def test_master_service_list_only_has_prices_for_selected_level(self):
+        salon = Salon.objects.create(name='Салон', address='Адрес', latitude=55, longitude=37)
+        category = ServiceCategory.objects.create(title='Стрижки', code='level-filter')
+        service = Service.objects.create(category=category, title='Стрижка только арт-директора',
+                                         price_code='LEVEL-1')
+        offer = ServiceSalon.objects.create(service=service, salon=salon)
+        ServicePrice.objects.create(salon_service=offer, level='art_director', amount=3000)
+        MasterSalon.objects.create(master=self.master, salon=salon)
+        self.master.price_level = 'stylist'
+        self.master.save(update_fields=['price_level'])
+        self.client.force_login(self.staff)
+        url = reverse('admin:masters_master_services', args=[self.master.pk])
+        self.assertNotContains(self.client.get(url), service.title)
+        response = self.client.post(url, {
+            'action': 'add', 'salon_id': salon.pk, 'service_id': service.pk,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ServiceStaffPrice.objects.filter(master=self.master, service=service).exists())
+
+        ServicePrice.objects.create(salon_service=offer, level='stylist', amount=2500)
+        self.assertContains(self.client.get(url), service.title)
 
     def test_feedback_view_requires_standard_django_permission(self):
         feedback = FeedbackRequest.objects.create(name='Клиент', phone='+79990000000',
@@ -165,3 +285,40 @@ class MasterProfileAdminTests(TestCase):
             public_page = self.client.get('/api/v1/pages/by-path/team/master-test/')
             self.assertEqual(public_page.status_code, 200)
             self.assertEqual(len(public_page.data['pictures']), 2)
+
+    def test_master_uploads_service_work_only_for_assigned_service(self):
+        salon = Salon.objects.create(name='Салон работ', address='Адрес', latitude=55, longitude=37)
+        category = ServiceCategory.objects.create(title='Стрижки', code='work-photos')
+        service = Service.objects.create(category=category, title='Мужская стрижка', price_code='WORK-1')
+        other_service = Service.objects.create(category=category, title='Окрашивание', price_code='WORK-2')
+        ServiceSalon.objects.create(service=service, salon=salon)
+        MasterSalon.objects.create(master=self.master, salon=salon)
+        ServiceStaffPrice.objects.create(master=self.master, salon=salon, service=service)
+        url = reverse('admin:masters_master_service_work', args=[self.master.pk])
+        other_url = reverse('admin:masters_master_service_work', args=[self.other_master.pk])
+        image_buffer = BytesIO()
+        Image.new('RGB', (2, 2), 'blue').save(image_buffer, format='PNG')
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(other_url).status_code, 404)
+
+        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
+            response = self.client.post(url, {
+                'action': 'upload', 'service': other_service.pk,
+                'image': SimpleUploadedFile('bad.png', image_buffer.getvalue(), content_type='image/png'),
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(MasterServiceWorkPhoto.objects.exists())
+            response = self.client.post(url, {
+                'action': 'upload', 'service': service.pk, 'caption': 'Готовая стрижка',
+                'image': SimpleUploadedFile('work.png', image_buffer.getvalue(), content_type='image/png'),
+            })
+            self.assertEqual(response.status_code, 302)
+            photo = MasterServiceWorkPhoto.objects.get(master=self.master, service=service)
+            self.assertEqual(photo.caption, 'Готовая стрижка')
+            page = self.client.get('/api/v1/pages/by-path/team/master-test/')
+            self.assertEqual(page.data['master']['service_work_photos'][0]['service_id'], service.pk)
+            self.assertEqual(page.data['master']['service_work_photos'][0]['caption'], 'Готовая стрижка')
+            self.assertEqual(self.client.post(url, {
+                'action': 'delete', 'photo_id': photo.pk,
+            }).status_code, 302)
+            self.assertFalse(MasterServiceWorkPhoto.objects.exists())

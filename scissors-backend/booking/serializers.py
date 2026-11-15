@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from client_auth.models import VerifiedPhone
 from client_auth.services import normalize_phone
+from masters.constants import TEST_MASTER_SLUG_PREFIX
 from masters.models import Master, MasterSalon
 from salons.models import Salon
 from services.models import Service, ServiceStaffPrice
@@ -18,7 +19,9 @@ class BookingRequestSerializer(serializers.Serializer):
     service_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), min_length=1, max_length=10)
     preferred_master = serializers.PrimaryKeyRelatedField(
         queryset=Master.objects.filter(is_active=True, is_system=False,
-                                       is_booking_placeholder=False), required=False, allow_null=True,
+                                       is_booking_placeholder=False).exclude(
+                                           slug__startswith=TEST_MASTER_SLUG_PREFIX
+                                       ), required=False, allow_null=True,
     )
     requested_start = serializers.DateTimeField()
     requested_end = serializers.DateTimeField(required=False, allow_null=True)

@@ -94,21 +94,22 @@
               {{ master.name }}
             </div>
 
-            <!-- Описание -->
-            <div class="text-body2 text-grey-8" style="line-height: 1.5;" v-html="master.bio"/>
-
             <!-- Салоны, где работает мастер -->
             <div class="q-mt-sm">
               <q-badge
-                  v-for="salon in master.salon_details"
-                  :key="salon.id"
-                  color="grey-3"
-                  text-color="dark"
-                  class="q-mr-xs"
+                v-for="salon in master.salon_details"
+                :key="salon.id"
+                color="grey-3"
+                text-color="dark"
+                class="q-mr-xs"
               >
                 {{ salon.name }}
               </q-badge>
             </div>
+
+            <!-- Описание -->
+            <div class="text-body2 text-grey-8" style="line-height: 1.5;" v-html="master.bio"/>
+
           </q-card-section>
 
           <q-card-actions align="center" class="q-pb-md">
@@ -196,11 +197,6 @@ useMeta(() => ({
     }
   }
 }));
-
-const openVacancyForm = () => {
-  // TODO: Открыть форму заявки на вакансию
-  console.log('Открыть форму "Хочу в команду"');
-};
 </script>
 
 <style scoped>

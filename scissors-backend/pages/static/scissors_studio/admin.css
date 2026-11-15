@@ -1,4 +1,24 @@
 /* Admin-only form contrast. Keep Unfold's spacing and responsive layout. */
+#page .related-widget-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+
+#page .related-widget-wrapper > :not(.related-widget-wrapper-link) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#page .related-widget-wrapper > .related-widget-wrapper-link {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+}
+
 #page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="range"], [type="color"]), textarea:not(.django_ckeditor_5), select):not(.ck *) {
   box-sizing: border-box;
   width: 100%;

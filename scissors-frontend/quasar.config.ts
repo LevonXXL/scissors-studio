@@ -7,13 +7,14 @@ import { loadEnv } from 'vite';
 export default defineConfig((ctx) => {
   const viteEnv = loadEnv(ctx.dev ? 'development' : 'production', process.cwd(), 'VITE_');
   const siteUrl = viteEnv.VITE_SITE_URL || process.env.SITE_URL
-    || (ctx.dev ? 'http://localhost:9100' : 'https://scissors.group');
+    || (ctx.dev ? 'http://localhost:9100' : 'https://studio.scissors.group');
   const apiOrigin = process.env.API_ORIGIN
     || (ctx.dev ? 'http://localhost:8000' : 'https://api.studio.scissors.group');
   const apiBaseUrl = viteEnv.VITE_API_BASE_URL || `${apiOrigin.replace(/\/$/, '')}/api/v1`;
   // Empty STATIC_URL keeps images from public/ on the frontend's own origin.
-  const staticUrl = viteEnv.VITE_STATIC_URL || '';
-  const configuredMediaUrl = viteEnv.VITE_MEDIA_URL || '/media/';
+  const staticUrl = viteEnv.VITE_STATIC_URL || (ctx.dev ? '' : 'https://studio.static.scissors.group/');
+  const configuredMediaUrl = viteEnv.VITE_MEDIA_URL
+    || (ctx.dev ? '/media/' : 'https://studio.static.scissors.group/media/');
   const mediaBase = new URL(configuredMediaUrl, new URL(apiBaseUrl).origin);
   // A bare CDN origin means the usual Django /media/ location.
   const resolvedMediaUrl = mediaBase.pathname === '/' && /^https?:\/\//.test(configuredMediaUrl)

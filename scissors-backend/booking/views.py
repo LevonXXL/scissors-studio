@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from client_auth.services import client_ip, count_attempt
 from client_auth.models import VerifiedPhone
+from masters.constants import TEST_MASTER_SLUG_PREFIX
 from masters.models import Master
 from salons.models import Salon
 from services.models import Service, ServiceStaffPrice
@@ -88,7 +89,7 @@ class BookingOptionsView(APIView):
         masters = list(Master.objects.filter(
             master_salons__salon_id=salon_id, is_active=True, is_system=False,
             is_booking_placeholder=False,
-        ).distinct().order_by('name'))
+        ).exclude(slug__startswith=TEST_MASTER_SLUG_PREFIX).distinct().order_by('name'))
         master_ids = {master.pk for master in masters}
         assignments = {}
         for service_id, master_id in ServiceStaffPrice.objects.filter(

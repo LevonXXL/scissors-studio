@@ -56,8 +56,15 @@ def sidebar_navigation(request):
         if items:
             groups.append({'title': app['name'], 'items': items})
     if request.user.is_staff:
+        groups.append({'title': 'Аналитика', 'items': [
+            {'title': 'Посещения и API', 'link': reverse('admin-analytics-report')},
+        ]})
         groups.append({'title': 'Уведомления', 'items': [
             {'title': 'Мои настройки', 'link': reverse('admin-push-settings')},
+        ]})
+    if request.user.is_superuser:
+        groups.append({'title': 'Интеграции', 'items': [
+            {'title': 'Telegram webhook', 'link': reverse('admin-telegram-webhook-settings')},
         ]})
     return groups
 

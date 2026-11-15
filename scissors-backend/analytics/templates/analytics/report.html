@@ -1,0 +1,63 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+  <h1>Внутренняя статистика</h1>
+  <form method="get" style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin:20px 0;">
+    <label>Период<br><select name="period" id="period-select">
+      <option value="7d" {% if period == '7d' %}selected{% endif %}>7 дней, по часам</option>
+      <option value="30d" {% if period == '30d' %}selected{% endif %}>30 дней</option>
+      <option value="6m" {% if period == '6m' %}selected{% endif %}>6 месяцев</option>
+      <option value="custom" {% if period == 'custom' %}selected{% endif %}>Диапазон дат</option>
+    </select></label>
+    <label>С<br><input type="date" name="from" value="{{ start }}"></label>
+    <label>По<br><input type="date" name="to" value="{{ end }}"></label>
+    <button type="submit" class="button default">Показать</button>
+  </form>
+  <p>Просмотры страниц и вызовы API считаются отдельно. Посещенческие метрики доступны только за дни, для которых сохранились исходные записи Angie.</p>
+  <section>
+    <h2>Трафик и ошибки</h2>
+    <div id="traffic-chart" style="height:370px; width:100%;"></div>
+  </section>
+  <section>
+    <h2>Посетители и сессии по дням</h2>
+    <div id="visitor-chart" style="height:370px; width:100%;"></div>
+  </section>
+  <section style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:24px;">
+    <div><h2>Топ-10 страниц</h2><ol>{% for path, count in report.top_pages %}<li>{{ path }} — {{ count }}</li>{% empty %}<li>Нет данных</li>{% endfor %}</ol></div>
+    <div><h2>Топ-10 эндпоинтов</h2><ol>{% for path, count in report.top_api %}<li>{{ path }} — {{ count }}</li>{% empty %}<li>Нет данных</li>{% endfor %}</ol></div>
+  </section>
+</div>
+{{ report|json_script:"analytics-report-data" }}
+<script src="{% static 'analytics/echarts.min.js' %}"></script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('analytics-report-data').textContent);
+  if (!window.echarts) return;
+  const traffic = echarts.init(document.getElementById('traffic-chart'));
+  const visitors = echarts.init(document.getElementById('visitor-chart'));
+  traffic.setOption({
+    tooltip: {trigger: 'axis'}, legend: {}, dataZoom: [{type: 'inside'}, {type: 'slider'}],
+    xAxis: {type: 'category', data: data.labels}, yAxis: {type: 'value'},
+    series: [
+      {name: 'Просмотры страниц', type: 'line', data: data.traffic.page_views, showSymbol: false},
+      {name: 'Вызовы API', type: 'line', data: data.traffic.api_calls, showSymbol: false},
+      {name: 'Ошибки 4xx', type: 'line', data: data.traffic.errors_4xx, showSymbol: false},
+      {name: 'Ошибки 5xx', type: 'line', data: data.traffic.errors_5xx, showSymbol: false}
+    ]
+  });
+  visitors.setOption({
+    tooltip: {trigger: 'axis'}, legend: {}, dataZoom: [{type: 'inside'}, {type: 'slider'}],
+    xAxis: {type: 'category', data: data.day_labels}, yAxis: [{type: 'value'}, {type: 'value'}],
+    series: [
+      {name: 'Уникальные посетители', type: 'line', data: data.visitors.visitors, connectNulls: false},
+      {name: 'Сессии', type: 'line', data: data.visitors.sessions, connectNulls: false},
+      {name: 'Страниц на сессию', type: 'line', yAxisIndex: 1, data: data.visitors.pages_per_session, connectNulls: false},
+      {name: 'Ср. длительность, сек', type: 'line', yAxisIndex: 1, data: data.visitors.duration_seconds, connectNulls: false}
+    ]
+  });
+  window.addEventListener('resize', () => { traffic.resize(); visitors.resize(); });
+})();
+</script>
+{% endblock %}

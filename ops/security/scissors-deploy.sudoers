@@ -1,0 +1,1 @@
+scissors ALL=(root) NOPASSWD: /usr/bin/systemctl restart scissors-backend.service, /usr/bin/systemctl restart scissors-frontend.service

@@ -76,6 +76,11 @@ class Salon(models.Model):
                   'например: https://yandex.ru/maps/org/scissors/...'
     )
 
+    google_maps_url = models.URLField(
+        'Google Maps', max_length=500, blank=True, default='',
+        help_text='Прямая ссылка на карточку салона в Google Maps для REWIO.',
+    )
+
     twogis_url = models.URLField(
         '2ГИС', max_length=500, blank=True, default='',
         help_text='Прямая ссылка на карточку салона в 2ГИС, '

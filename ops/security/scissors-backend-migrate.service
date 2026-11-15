@@ -1,0 +1,29 @@
+[Unit]
+Description=Apply Scissors Django migrations
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=scissors-backend
+Group=scissors-backend
+WorkingDirectory=/home/scissors/current/scissors-backend
+EnvironmentFile=/etc/scissors/backend.env
+EnvironmentFile=/etc/scissors/vapid.env
+Environment=SCISSORS_PRODUCTION=1
+Environment=DJANGO_SETTINGS_MODULE=scissors_studio.settings
+Environment=SITE_URL=https://studio.scissors.group
+Environment=STATIC_ROOT=/home/scissors/static
+Environment=MEDIA_ROOT=/home/scissors/media
+Environment=STATIC_URL=https://studio.static.scissors.group/static/
+Environment=MEDIA_URL=https://studio.static.scissors.group/media/
+Environment=FILE_UPLOAD_TEMP_DIR=/home/scissors/tmp
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/home/scissors/tmp
+ExecStart=/home/scissors/current/scissors-backend/.venv/bin/python manage.py migrate --noinput
+UMask=0007
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/scissors/current:/home/scissors/current
+BindPaths=/home/scissors/tmp:/home/scissors/tmp

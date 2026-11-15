@@ -1,10 +1,12 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.db import transaction
 from filer.fields.image import FilerImageField
 
 from pages.models import Page
 from salons.models import Salon
+from services.price_levels import MASTER_PRICE_LEVEL_CHOICES
 
 
 class Master(models.Model):
@@ -36,12 +38,7 @@ class Master(models.Model):
         settings.AUTH_USER_MODEL, verbose_name='Учётная запись', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='master_profile',
     )
-    PRICE_LEVEL_CHOICES = [
-        ('universal', 'Универсал'), ('modeler', 'Модельер'),
-        ('stylist', 'Стилист'), ('top_stylist', 'Топ-стилист'),
-        ('art_director', 'Арт-директор'), ('nail_master', 'Мастер ногтевого сервиса'),
-        ('top_nail_master', 'Топ-мастер ногтевого сервиса'),
-    ]
+    PRICE_LEVEL_CHOICES = MASTER_PRICE_LEVEL_CHOICES
     price_level = models.CharField(
         'Подтверждённый уровень прайса', max_length=32, choices=PRICE_LEVEL_CHOICES,
         blank=True, help_text='Устанавливается вручную; не выводится из данных YCLIENTS.',
@@ -109,6 +106,11 @@ class Master(models.Model):
             raise ValidationError({'price_level': 'Техническая запись не имеет уровня прайса.'})
 
     def save(self, *args, **kwargs):
+        creating = self._state.adding
+        update_fields = kwargs.get('update_fields')
+        if (creating or update_fields is None or 'price_level' in update_fields):
+            if self.price_level and self.price_level not in dict(self.PRICE_LEVEL_CHOICES):
+                raise ValidationError({'price_level': 'Уровень отсутствует в Excel-прайсе.'})
         if not self.slug:
             from core_utils.slugify_ru import slugify_ru
             base_slug = slugify_ru(self.name) or 'master'
@@ -118,7 +120,52 @@ class Master(models.Model):
                 i += 1
                 slug = f'{base_slug}-{i}'
             self.slug = slug
-        super().save(*args, **kwargs)
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if creating and not self.page_id:
+                self.ensure_page()
+
+    def ensure_page(self):
+        """Give every persisted master a page, without publishing test records."""
+        if self.page_id:
+            return self.page
+        if not self.pk:
+            raise ValueError('Сначала сохраните мастера.')
+
+        from pages.admin_links import page_owners
+
+        with transaction.atomic():
+            current_page_id = (Master.objects.select_for_update().filter(pk=self.pk)
+                               .values_list('page_id', flat=True).get())
+            if current_page_id:
+                self.page_id = current_page_id
+                return Page.objects.get(pk=current_page_id)
+
+            team = Page.objects.filter(url_path='team', parent__isnull=True).first()
+            base_url = self.slug if team else f'master-draft-{self.pk}'
+            url = base_url
+            path = f'{team.url_path}/{url}' if team else url
+            existing = Page.objects.filter(url_path=path).first()
+            if existing and not page_owners(existing):
+                page = existing
+            else:
+                suffix = 1
+                while existing:
+                    suffix += 1
+                    url = f'{base_url}-{suffix}'
+                    path = f'{team.url_path}/{url}' if team else url
+                    existing = Page.objects.filter(url_path=path).first()
+                page = Page.objects.create(
+                    title=self.name, url=url, parent=team,
+                    is_published=bool(
+                        team and self.is_active and not self.is_system
+                        and not self.is_booking_placeholder
+                        and not self.slug.startswith('test-master-sandbox-')
+                    ),
+                )
+            Master.objects.filter(pk=self.pk).update(page=page)
+            self.page = page
+            return page
 
 
 class MasterSalon(models.Model):
@@ -147,3 +194,76 @@ class MasterSalon(models.Model):
 
     def __str__(self):
         return f'{self.master} — {self.salon}'
+
+
+class MasterServiceWorkPhoto(models.Model):
+    """Пример работы мастера по конкретной услуге каталога."""
+
+    master = models.ForeignKey(Master, on_delete=models.CASCADE, related_name='service_work_photos')
+    service = models.ForeignKey('services.Service', on_delete=models.PROTECT,
+                                related_name='master_work_photos')
+    image = FilerImageField(verbose_name='Фотография', on_delete=models.PROTECT, related_name='+')
+    caption = models.CharField('Подпись', max_length=255, blank=True)
+    position = models.PositiveIntegerField('Порядок', default=0)
+    created_at = models.DateTimeField('Добавлено', auto_now_add=True)
+
+    class Meta:
+        ordering = ('service__title', 'position', 'id')
+        verbose_name = 'Пример работы мастера по услуге'
+        verbose_name_plural = 'Примеры работ мастеров по услугам'
+
+    def clean(self):
+        super().clean()
+        if self.master_id and self.service_id:
+            from services.models import ServiceStaffPrice
+            if not ServiceStaffPrice.objects.filter(master_id=self.master_id,
+                                                    service_id=self.service_id).exists():
+                raise ValidationError('Сначала назначьте услугу мастеру хотя бы в одном салоне.')
+
+    def __str__(self):
+        return f'{self.master} — {self.service}'
+
+
+class MasterMessengerAccount(models.Model):
+    PLATFORM_TELEGRAM = 'telegram'
+    PLATFORM_MAX = 'max'
+    PLATFORM_CHOICES = ((PLATFORM_TELEGRAM, 'Telegram'), (PLATFORM_MAX, 'MAX'))
+
+    master = models.ForeignKey(Master, on_delete=models.CASCADE, related_name='messenger_accounts')
+    platform = models.CharField(max_length=16, choices=PLATFORM_CHOICES)
+    external_user_id = models.CharField(max_length=64)
+    pending_action = models.CharField(max_length=32, blank=True)
+    pending_service = models.ForeignKey('services.Service', null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name='+')
+    linked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('platform', 'external_user_id'),
+                                    name='unique_messenger_user'),
+            models.UniqueConstraint(fields=('platform', 'master'),
+                                    name='unique_master_messenger'),
+        ]
+        verbose_name = 'Мессенджер мастера'
+        verbose_name_plural = 'Мессенджеры мастеров'
+
+
+class MasterMessengerPairingCode(models.Model):
+    master = models.ForeignKey(Master, on_delete=models.CASCADE, related_name='messenger_pairing_codes')
+    digest = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Код подключения мессенджера'
+        verbose_name_plural = 'Коды подключения мессенджера'
+
+
+class ProcessedMessengerUpdate(models.Model):
+    platform = models.CharField(max_length=16, choices=MasterMessengerAccount.PLATFORM_CHOICES)
+    update_id = models.CharField(max_length=128)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('platform', 'update_id'),
+                                               name='unique_messenger_update')]

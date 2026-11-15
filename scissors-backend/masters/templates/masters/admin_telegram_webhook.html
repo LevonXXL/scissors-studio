@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div style="max-width:800px">
+  <p>Адрес webhook: <code>{{ webhook_url }}</code></p>
+  <p>Токен бота: {% if token_configured %}задан{% else %}не задан{% endif %}<br>
+     Секрет webhook: {% if secret_configured %}задан{% else %}не задан{% endif %}<br>
+     SOCKS5-прокси: {% if proxy_configured %}задан{% else %}не задан{% endif %}</p>
+  <form method="post">{% csrf_token %}
+    <button type="submit" class="font-medium px-4 py-2 border rounded-default cursor-pointer">
+      Зарегистрировать webhook в Telegram
+    </button>
+  </form>
+</div>
+{% endblock %}

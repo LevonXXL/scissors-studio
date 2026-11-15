@@ -58,7 +58,7 @@ class SalonAdmin(admin.ModelAdmin):
             ),
         }),
         ('Интеграция с YCLIENTS', {'fields': ('yclients_company_id', 'yclients_booking_url', 'last_synced_at')}),
-        ('Интеграция с REWIO', {'fields': ('yandex_maps_url', 'twogis_url', 'zoon_url', 'rewio_object_id')}),
+        ('Интеграция с REWIO', {'fields': ('yandex_maps_url', 'google_maps_url', 'twogis_url', 'zoon_url', 'rewio_object_id')}),
     )
 
     @admin.display(description='Редактировать страницу')

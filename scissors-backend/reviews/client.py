@@ -11,10 +11,10 @@ class RewioError(Exception):
 # Маппинг source_id из Rewio → наши константы из models.SOURCE_*
 SOURCE_ID_MAP = {
     1: 1,   # Яндекс.Карты
-    2: 2,   # 2ГИС
-    3: 3,   # Zoon
-    4: 4,   # Google
-    5: 5,   # Flamp
+    2: 4,   # Google
+    3: 2,   # 2ГИС
+    201: 3, # Zoon
+    207: 5, # Flamp
 }
 
 
@@ -67,6 +67,15 @@ class RewioClient:
             'links': [{'url': url} for url in links],
         }
         return self._request('POST', 'objects', json=payload)
+
+    def get_object(self, object_id: str | int) -> dict:
+        return self._request('GET', f'objects/{object_id}')
+
+    def add_links(self, object_id: str | int, links: list[str]) -> dict:
+        return self._request(
+            'POST', f'objects/{object_id}/links',
+            json=[{'url': url} for url in links],
+        )
 
     # ------------------------------------------------------------------
     # Отзывы

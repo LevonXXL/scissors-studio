@@ -71,9 +71,17 @@ def reconcile_master_duplicate(canonical_id: int, duplicate_id: int, *, apply: b
             raise UnsafeMasterMerge(f'Поля мастеров различаются: {", ".join(differing_fields)}.')
 
         duplicate_page, canonical_page = duplicate.page, canonical.page
-        transfer_page = bool(duplicate_page and not canonical_page)
+        empty_generated_page = bool(
+            canonical_page and canonical_page.title == canonical.name
+            and canonical_page.url == canonical.slug
+            and not any((canonical_page.content, canonical_page.meta_title,
+                         canonical_page.meta_description))
+            and not canonical_page.pictures.exists()
+            and not canonical_page.get_children().exists()
+        )
+        transfer_page = bool(duplicate_page and (not canonical_page or empty_generated_page))
         page_fields_to_recover = []
-        if duplicate_page and canonical_page:
+        if duplicate_page and canonical_page and not transfer_page:
             if (
                 duplicate_page.get_children().exists()
                 or Salon.objects.filter(page_id=duplicate_page.pk).exists()
@@ -97,7 +105,10 @@ def reconcile_master_duplicate(canonical_id: int, duplicate_id: int, *, apply: b
             ):
                 raise UnsafeMasterMerge('Страница дубля не является отдельной страницей мастера.')
             target_path = f'team/{canonical.slug}'
-            if Page.objects.filter(url_path=target_path).exclude(pk=duplicate_page.pk).exists():
+            allowed_pages = [duplicate_page.pk]
+            if empty_generated_page:
+                allowed_pages.append(canonical_page.pk)
+            if Page.objects.filter(url_path=target_path).exclude(pk__in=allowed_pages).exists():
                 raise UnsafeMasterMerge('Адрес страницы основной записи уже занят.')
 
         canonical_prices = {price.service_id: price for price in ServiceStaffPrice.objects.filter(master=canonical)}
@@ -147,6 +158,10 @@ def reconcile_master_duplicate(canonical_id: int, duplicate_id: int, *, apply: b
             if transfer_page:
                 # The Page carries the editorial content and SEO; move its
                 # OneToOne link before deleting the old Master.
+                if empty_generated_page:
+                    canonical.page = None
+                    canonical.save(update_fields=['page'])
+                    canonical_page.delete()
                 duplicate.page = None
                 duplicate.save(update_fields=['page'])
                 canonical.page = duplicate_page

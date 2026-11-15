@@ -10,6 +10,7 @@ export interface PagePicture {
 export interface PageListItem {
   id: number;
   title: string;
+  link_title: string;
   title_tag: string;
   meta_description: string;
   url: string;
@@ -18,9 +19,16 @@ export interface PageListItem {
   position: number;
 }
 
+export interface PageBreadcrumb {
+  link_title: string;
+  url_path: string;
+}
+
 export interface PageDetail {
   id: number;
   title: string;
+  link_title: string;
+  breadcrumbs: PageBreadcrumb[];
   title_tag: string;
   content: string;
   meta_title: string;
@@ -29,7 +37,16 @@ export interface PageDetail {
   url_path: string;
   parent: number | null;
   pictures: PagePicture[];
-  master: Pick<Master, 'name' | 'photo' | 'bio'> | null;
+  master: (Pick<Master, 'name' | 'photo' | 'bio'> & {
+    service_work_photos: {
+      id: number;
+      service_id: number;
+      service_title: string;
+      service_url_path: string;
+      image: string;
+      caption: string;
+    }[];
+  }) | null;
   booking_target?: { salon?: string; service?: number; master?: number } | null;
   yclients_booking_links: { salon_id: number; salon_name: string; url: string }[];
 }

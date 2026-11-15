@@ -21,6 +21,52 @@ from .models import Service, ServiceCategory, ServicePrice, ServiceSalon, Servic
 PRICE_DIR = Path(__file__).resolve().parents[2] / 'price'
 
 
+class ServiceStaffDurationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.salon = Salon.objects.create(name='Салон', address='Адрес', latitude=55, longitude=37)
+        cls.category = ServiceCategory.objects.create(title='Стрижки', code='duration-test')
+        cls.service = Service.objects.create(category=cls.category, title='Стрижка', duration_seconds=3600)
+        ServiceSalon.objects.create(service=cls.service, salon=cls.salon)
+        cls.standard_master = Master.objects.create(name='Мастер стандарт')
+        cls.fast_master = Master.objects.create(name='Мастер 50 минут')
+        cls.slow_master = Master.objects.create(name='Мастер 70 минут')
+        for master in (cls.standard_master, cls.fast_master, cls.slow_master):
+            MasterSalon.objects.create(master=master, salon=cls.salon)
+        cls.standard = ServiceStaffPrice.objects.create(service=cls.service, master=cls.standard_master,
+                                                        salon=cls.salon)
+        cls.fast = ServiceStaffPrice.objects.create(service=cls.service, master=cls.fast_master,
+                                                    salon=cls.salon, duration_seconds=3000)
+        cls.slow = ServiceStaffPrice.objects.create(service=cls.service, master=cls.slow_master,
+                                                    salon=cls.salon, duration_seconds=4200)
+
+    def test_effective_duration_uses_individual_value_or_service_default(self):
+        self.assertEqual(self.standard.effective_duration_seconds, 3600)
+        self.assertEqual(self.fast.effective_duration_seconds, 3000)
+
+    def test_service_price_rejects_levels_outside_excel(self):
+        offer = ServiceSalon.objects.get(service=self.service, salon=self.salon)
+        with self.assertRaises(ValidationError):
+            ServicePrice.objects.create(salon_service=offer, level='unknown', amount=2000)
+        self.assertEqual(self.slow.effective_duration_seconds, 4200)
+        self.service.duration_seconds = None
+        self.assertIsNone(self.standard.effective_duration_seconds)
+        self.assertEqual(self.fast.effective_duration_seconds, 3000)
+
+    def test_catalogue_exposes_effective_duration_for_each_master(self):
+        response = self.client.get(f'/api/v1/service-categories/?salon={self.salon.pk}')
+        self.assertEqual(response.status_code, 200)
+        categories = response.data['results'] if isinstance(response.data, dict) else response.data
+        service = categories[0]['services'][0]
+        self.assertEqual(service['duration_seconds'], 3600)
+        durations = {master['id']: master['duration_seconds'] for master in service['masters']}
+        self.assertEqual(durations, {
+            self.standard_master.pk: 3600,
+            self.fast_master.pk: 3000,
+            self.slow_master.pk: 4200,
+        })
+
+
 class ServiceImageTests(TestCase):
     def test_catalogue_prefers_service_image_and_adds_it_to_page(self):
         root = Page.objects.get(url_path='uslugi')

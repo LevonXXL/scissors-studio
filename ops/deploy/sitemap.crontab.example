@@ -1,0 +1,4 @@
+# Add this to: sudo crontab -u scissors-backend -e
+SHELL=/bin/bash
+CRON_TZ=Europe/Moscow
+15 3 * * * set -euo pipefail; set -a; . /etc/scissors/backend.env; . /etc/scissors/vapid.env; export SCISSORS_PRODUCTION=1 STATIC_ROOT=/home/scissors/static MEDIA_ROOT=/home/scissors/media FILE_UPLOAD_TEMP_DIR=/home/scissors/tmp HOME=/home/scissors/tmp PYTHONDONTWRITEBYTECODE=1; cd /home/scissors/current/scissors-backend; .venv/bin/python manage.py generate_sitemap --output=/home/scissors/static/sitemap.xml 2>&1 | /usr/bin/logger -t scissors-sitemap

@@ -11,10 +11,10 @@ LOCAL_DIST_DIR = dist/ssr
 
 # --- Сервер ---
 
-REMOTE_USER = levon
+REMOTE_USER = scissors
+REMOTE_ADMIN_USER = levon
 REMOTE_HOST = chinese-russian.com
-REMOTE_PATH = /opt/scissors-frontend
-STATIC_REMOTE_PATH = /opt/scissors-backend/staticfiles
+REMOTE_PATH = /home/scissors
 
 
 # --- Systemd ---
@@ -24,7 +24,9 @@ SERVICE_NAME = scissors-frontend
 
 # --- Rsync ---
 
-RSYNC_CMD = rsync -av --delete -e ssh
+DEPLOY_HELPER = ../ops/deploy/scissors-git-deploy.sh
+SSH_DEPLOY = ssh -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+SCP_DEPLOY = scp -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
 
 
 # ============================================================
@@ -44,31 +46,18 @@ build:
 
 .PHONY: sync-dry-run
 sync-dry-run:
-	@echo "[SYNC-DRY-RUN] Проверка синхронизации:"
-	@echo "  $(LOCAL_DIST_DIR)/"
-	@echo "  -> $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/"
-	$(RSYNC_CMD) --dry-run \
-		$(LOCAL_DIST_DIR)/ \
-		$(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
-	@echo "[SYNC-DRY-RUN] Проверка файлов public/ для Angie /static/:"
-	rsync -av --dry-run -e ssh public/ $(REMOTE_USER)@$(REMOTE_HOST):$(STATIC_REMOTE_PATH)/
+	git ls-remote origin refs/heads/main
 
 
 .PHONY: sync-prod
 sync-prod:
-	@echo "[SYNC-PROD] Синхронизация:"
-	@echo "  $(LOCAL_DIST_DIR)/"
-	@echo "  -> $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/"
-	$(RSYNC_CMD) \
-		$(LOCAL_DIST_DIR)/ \
-		$(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
-	@echo "[SYNC-PROD] Синхронизация завершена."
+	@$(SCP_DEPLOY) $(DEPLOY_HELPER) $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/scissors-git-deploy.sh
+	@$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "chmod 0750 $(REMOTE_PATH)/scissors-git-deploy.sh && bash $(REMOTE_PATH)/scissors-git-deploy.sh deploy main"
 
 
 .PHONY: sync-public-static
 sync-public-static:
-	@echo "[STATIC] Копирование public/ в каталог Angie /static/ без удаления Django-статики"
-	rsync -av -e ssh public/ $(REMOTE_USER)@$(REMOTE_HOST):$(STATIC_REMOTE_PATH)/
+	@echo "Файлы public/ копируются из Git-релиза при make deploy."
 
 
 # ============================================================
@@ -77,10 +66,7 @@ sync-public-static:
 
 .PHONY: install-prod
 install-prod:
-	@echo "[INSTALL] Установка production dependencies..."
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) \
-		"cd $(REMOTE_PATH) && npm install --omit=dev"
-	@echo "[INSTALL] Dependencies установлены."
+	@echo "Production-зависимости устанавливаются и собираются из Git-релиза при make deploy."
 
 
 # ============================================================
@@ -90,23 +76,29 @@ install-prod:
 .PHONY: restart
 restart:
 	@echo "[RESTART] Перезапуск $(SERVICE_NAME)..."
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) \
-		"sudo systemctl restart $(SERVICE_NAME)"
-	@echo "[RESTART] Сервис перезапущен."
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) \
+		"sudo -n /usr/bin/systemctl restart $(SERVICE_NAME).service"
+
+.PHONY: snapshots rollback
+snapshots:
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "ls -1dt $(REMOTE_PATH)/releases/*"
+
+rollback:
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "bash $(REMOTE_PATH)/scissors-git-deploy.sh rollback"
 
 
 .PHONY: status
 status:
 	@echo "[STATUS] $(SERVICE_NAME)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) \
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) \
 		"systemctl status $(SERVICE_NAME) --no-pager"
 
 
 .PHONY: logs
 logs:
 	@echo "[LOGS] $(SERVICE_NAME)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) \
-		"journalctl -u $(SERVICE_NAME) -n 100 -f"
+	ssh $(REMOTE_ADMIN_USER)@$(REMOTE_HOST) \
+		"sudo -n journalctl -u $(SERVICE_NAME) -n 100 --no-pager"
 
 
 # ============================================================
@@ -114,7 +106,7 @@ logs:
 # ============================================================
 
 .PHONY: deploy
-deploy: build sync-prod sync-public-static install-prod restart
+deploy: sync-prod
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ Scissors Studio frontend deployed"

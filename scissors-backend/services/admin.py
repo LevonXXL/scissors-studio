@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib import messages
 from django import forms
 from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -12,8 +13,10 @@ import re
 
 from pages.admin_links import RelatedPageFormMixin, align_page, root_page
 from salons.models import Salon
+from sync.client import YClientsDataClient, YClientsDataError
 
-from .models import Service, ServiceCategory, ServiceStaffPrice, ServiceSalon, ServicePrice
+from .models import Service, ServiceCategory, ServiceStaffPrice, ServiceSalon, ServicePrice, YClientsServiceMatch
+from .yclients_review import apply_row, fetch_rows, review_rows
 from .excel_import import (read_xlsx, preview_candidates, describe_change, apply_preview,
                            describe_details, validate_salon, salon_matches_city,
                            LABELS, CATEGORIES)
@@ -90,7 +93,7 @@ class ServiceCategoryAdmin(admin.ModelAdmin):
             raise PermissionDenied
         if request.method == 'POST' and 'file' in request.FILES:
             uploaded = request.FILES['file']
-            data = uploaded.read()
+            data = uploaded.read(5_000_001)
             uploaded.seek(0)
             if is_unified_workbook(data):
                 return self.import_unified_excel(request)
@@ -111,7 +114,7 @@ class ServiceCategoryAdmin(admin.ModelAdmin):
                 salon = Salon.objects.filter(pk=salon_id, is_active=True).first()
                 if salon is None:
                     raise ValueError('Выберите салон для загрузки прайса.')
-                data = uploaded.read()
+                data = uploaded.read(5_000_001)
                 if len(data) > 5_000_000:
                     raise ValueError('Файл больше 5 МБ.')
                 preview = read_xlsx(data)
@@ -229,7 +232,7 @@ class ServiceCategoryAdmin(admin.ModelAdmin):
                 for key in ('service_excel_data', 'service_excel_digest', 'service_excel_salon_id',
                             'service_excel_matches', 'service_excel_reviewed'):
                     request.session.pop(key, None)
-                data = request.FILES['file'].read()
+                data = request.FILES['file'].read(5_000_001)
                 if len(data) > 5_000_000:
                     raise ValueError('Файл больше 5 МБ.')
                 preview = read_unified_xlsx(data)
@@ -324,6 +327,109 @@ class ServiceAdmin(admin.ModelAdmin):
     readonly_fields = ('yclients_service_id', 'last_synced_at')
     inlines = (ServiceSalonInline, ServiceStaffPriceInline)
 
+    def get_urls(self):
+        return [path('review-yclients/', self.admin_site.admin_view(self.review_yclients),
+                     name='services_service_review_yclients')] + super().get_urls()
+
+    def review_yclients(self, request):
+        if (not self.has_change_permission(request)
+                or not request.user.has_perm('services.add_servicestaffprice')
+                or not request.user.has_perm('services.add_yclientsservicematch')):
+            raise PermissionDenied
+        session_key = 'service_yclients_assignment_review'
+        snapshot = request.session.get(session_key, [])
+        if request.method == 'POST' and 'fetch' in request.POST:
+            salons = list(Salon.objects.filter(is_active=True).exclude(yclients_company_id__isnull=True)
+                          .exclude(yclients_company_id=''))
+            if not salons:
+                messages.error(request, 'Нет активных салонов с ID филиала YCLIENTS.')
+            else:
+                try:
+                    snapshot = fetch_rows(YClientsDataClient(), salons)
+                    request.session[session_key] = snapshot
+                    messages.success(request, f'Получено услуг YCLIENTS: {len(snapshot)}. База данных не изменена.')
+                except (YClientsDataError, ValueError) as exc:
+                    messages.error(request, str(exc))
+        elif request.method == 'POST' and 'save_row' in request.POST:
+            key = request.POST.get('row_key', '')
+            source = next((row for row in snapshot if row['key'] == key), None)
+            if source is None:
+                messages.error(request, 'Строка не найдена в предпросмотре. Получите данные YCLIENTS снова.')
+            else:
+                try:
+                    raw_ids = request.POST.getlist('target_id')
+                    if any(not value.isdecimal() for value in raw_ids):
+                        raise ValueError('ID услуг должны быть положительными целыми числами.')
+                    target_ids = set(int(value) for value in raw_ids)
+                    created, linked_id = apply_row(source, target_ids)
+                    id_note = ' ID YCLIENTS записан в услугу.' if linked_id else ''
+                    assignment_note = (f'Новых назначений: {created}.' if created else
+                                       'Новых назначений не потребовалось.')
+                    messages.success(request, f'Строка #{source["source_id"]} сохранена. '
+                                     f'{assignment_note}{id_note}')
+                except ValueError as exc:
+                    messages.error(request, f'Строка #{source["source_id"]}: {exc}')
+        elif request.method == 'POST' and 'apply_selected' in request.POST:
+            selected = set(request.POST.getlist('selected_rows'))
+            reviewed = {row['key']: row for row in review_rows(snapshot)}
+            if not selected:
+                messages.error(request, 'Отметьте строки для применения.')
+            elif selected - reviewed.keys():
+                messages.error(request, 'Предпросмотр изменился. Получите данные YCLIENTS снова.')
+            else:
+                applied = 0
+                assignments = 0
+                errors = []
+                for key in selected:
+                    row = reviewed[key]
+                    if row['status'] != 'ready':
+                        errors.append(f'#{row["source_id"]}: требуется ручной выбор или проверка мастеров')
+                        continue
+                    try:
+                        created, _ = apply_row(row, row['suggested_ids'])
+                        applied += 1
+                        assignments += created
+                    except ValueError as exc:
+                        errors.append(f'#{row["source_id"]}: {exc}')
+                if applied:
+                    messages.success(request, f'Сохранено строк: {applied}; новых назначений: {assignments}.')
+                if errors:
+                    messages.error(request, 'Не сохранено: ' + '; '.join(errors[:10]) +
+                                   (f'; и ещё {len(errors) - 10}' if len(errors) > 10 else ''))
+        all_rows = review_rows(snapshot) if snapshot else []
+        active_filter = request.GET.get('filter', 'all')
+        if active_filter not in ('all', 'problems', 'unassigned'):
+            active_filter = 'all'
+        if active_filter == 'problems':
+            rows = [row for row in all_rows if row['status'] == 'problem']
+        elif active_filter == 'unassigned':
+            rows = [row for row in all_rows if row['needs_assignment']]
+        else:
+            rows = all_rows
+        problem_rows = [row for row in rows if row['status'] == 'problem']
+        unlinked_by_salon = {}
+        for row in rows:
+            key = str(row['salon_id'])
+            if key not in unlinked_by_salon:
+                unlinked_by_salon[key] = [
+                    {'id': service.pk, 'title': service.title}
+                    for service in row['unlinked_services']
+                ]
+        return render(request, 'admin/services/review_yclients.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Сверка услуг и мастеров YCLIENTS',
+            'rows': rows,
+            'problem_rows': problem_rows,
+            'active_filter': active_filter,
+            'total_count': len(all_rows),
+            'problem_count': sum(row['status'] == 'problem' for row in all_rows),
+            'unassigned_count': sum(row['needs_assignment'] for row in all_rows),
+            'ready_count': sum(row['status'] == 'ready' for row in all_rows),
+            'saved_count': sum(row['status'] == 'saved' for row in all_rows),
+            'unlinked_by_salon': unlinked_by_salon,
+            'opts': self.model._meta,
+        })
+
     @transaction.atomic
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -338,3 +444,11 @@ class ServiceSalonAdmin(admin.ModelAdmin):
     search_fields = ('service__title',)
     autocomplete_fields = ('service', 'salon')
     inlines = (ServicePriceInline,)
+
+
+@admin.register(YClientsServiceMatch)
+class YClientsServiceMatchAdmin(admin.ModelAdmin):
+    list_display = ('salon', 'yclients_service_id', 'source_title', 'service', 'reviewed_at')
+    list_filter = ('salon',)
+    search_fields = ('yclients_service_id', 'source_title', 'service__title')
+    readonly_fields = ('reviewed_at',)

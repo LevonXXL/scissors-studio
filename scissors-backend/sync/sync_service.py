@@ -6,7 +6,8 @@
   адрес, фото и т.п. — то, что реально приходит из YCLIENTS);
 - "управляемые вручную в админке" — синхронизация их не трогает, потому
   что в YCLIENTS этих данных просто нет. Пример: Master.status
-  (самозанятый/ИП) и Master.price_level — эти значения задаются вручную.
+  (самозанятый/ИП). Уже подтверждённый Master.price_level не перезаписываем;
+  для новых мастеров его можно однозначно вывести из должности YCLIENTS.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from .client import YClientsDataClient
 from .images import fetch_and_store_image
 from .identifiers import staff_name as _staff_name, yclients_id as _yclients_id
 from .master_dedup import UnsafeMasterMerge, reconcile_master_duplicate
+from .master_price_levels import inferred_price_level, is_founder
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,8 @@ def sync_staff(salon, client):
                 name=entry.get('name', ''),
                 status=Master.STATUS_SELF_EMPLOYED,
             )
+            if not is_system and not is_founder(master):
+                master.price_level = inferred_price_level(entry) or ''
 
         if user_id:
             master.yclients_user_id = user_id

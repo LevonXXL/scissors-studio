@@ -1,5 +1,6 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
 {% include "admin/services/_import_excel_button.html" %}
+<a href="{% url 'admin:services_service_review_yclients' %}" class="button">Сверка YCLIENTS</a>
 {{ block.super }}
 {% endblock %}

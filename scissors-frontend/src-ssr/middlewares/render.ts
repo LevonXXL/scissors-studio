@@ -4,6 +4,21 @@ import type {
   SsrRenderRouteNotFoundError
 } from "#q-app";
 
+const unavailableHtml = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Страница временно недоступна — Scissors Studio</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 16px/1.5 Arial, sans-serif; color: #242424; background: #f7f5f3; }
+    main { padding: 32px; text-align: center; }
+    h1 { font-size: clamp(24px, 5vw, 36px); }
+  </style>
+</head>
+<body><main><h1>Страница временно недоступна</h1><p>Попробуйте открыть её позже.</p></main></body>
+</html>`;
+
 function isRedirectError(err: unknown): err is SsrRenderRedirectError {
   return (
     typeof err === "object" &&
@@ -17,6 +32,11 @@ function isRouteNotFoundError(
   err: unknown
 ): err is SsrRenderRouteNotFoundError {
   return typeof err === "object" && err !== null && "routeNotFound" in err;
+}
+
+function isApiUnavailableError(err: unknown): err is Error & { status: number } {
+  return err instanceof Error && 'status' in err && typeof err.status === 'number'
+    && (err.status === 0 || err.status >= 500);
 }
 
 /**
@@ -53,6 +73,13 @@ export default defineSsrMiddleware(({ app, resolve, render, serve }) => {
         return;
       }
 
+      if (isApiUnavailableError(err)) {
+        console.error('SSR API unavailable:', err.message);
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(503).send(unavailableHtml);
+        return;
+      }
+
       if (import.meta.env.QUASAR_DEV) {
         /**
          * Well, we treat any other code as error;
@@ -63,7 +90,7 @@ export default defineSsrMiddleware(({ app, resolve, render, serve }) => {
          * Note that serve.devError is available on dev only
          */
         console.error('SSR ORIGINAL ERROR:', err)
-        console.error('SSR ORIGINAL STACK:', err?.stack)
+        console.error('SSR ORIGINAL STACK:', err instanceof Error ? err.stack : err)
         const { errorHeaders, errorHtml } = serve.devError({ err, req });
         res.set(errorHeaders).status(500).send(errorHtml);
         return;

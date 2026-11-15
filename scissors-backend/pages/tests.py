@@ -57,6 +57,71 @@ class SitemapTests(TestCase):
 
 
 class PagePathTests(TestCase):
+    def test_detail_breadcrumbs_use_short_titles_and_exclude_home(self):
+        Page.objects.create(title='Главная', url='')
+        team = Page.objects.create(title='Команда и портфолио', link_title='Команда', url='team')
+        master = Page.objects.create(title='Михаил Стець', url='mihail-stets', parent=team)
+
+        response = self.client.get('/api/v1/pages/by-path/team/mihail-stets/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['link_title'], 'Михаил Стець')
+        self.assertEqual(response.data['breadcrumbs'], [
+            {'link_title': 'Команда', 'url_path': 'team'},
+            {'link_title': 'Михаил Стець', 'url_path': 'team/mihail-stets'},
+        ])
+        master.link_title = 'Михаил'
+        master.save(update_fields=['link_title'])
+        self.assertEqual(self.client.get('/api/v1/pages/by-path/team/mihail-stets/').data
+                         ['breadcrumbs'][-1]['link_title'], 'Михаил')
+
+    def test_normalize_master_url_preserves_old_unowned_page(self):
+        team = Page.objects.create(title='Команда', url='team')
+        old = Page.objects.create(title='Старая карточка', url='mihail-stets', parent=team)
+        current = Page.objects.create(title='Михаил Стець', url='mihail-stets-3', parent=team)
+        master = Master.objects.create(name='Михаил Стець', slug='mihail-stets-3', page=current)
+
+        call_command('normalize_master_urls', stdout=StringIO())
+        self.assertEqual(master.slug, 'mihail-stets-3')
+        call_command('normalize_master_urls', '--apply', stdout=StringIO())
+        master.refresh_from_db()
+        old.refresh_from_db()
+        current.refresh_from_db()
+        self.assertEqual(master.slug, 'mihail-stets')
+        self.assertEqual(current.url_path, 'team/mihail-stets')
+        self.assertFalse(old.is_published)
+        self.assertTrue(old.url_path.startswith(f'team/legacy-{old.pk}-'))
+
+    def test_populate_link_titles_preserves_manual_labels(self):
+        team = Page.objects.create(title='Команда и портфолио', url='team')
+        privacy = Page.objects.create(title='Политика обработки персональных данных',
+                                      link_title='Моя подпись', url='privacy')
+        call_command('populate_link_titles', '--apply', stdout=StringIO())
+        team.refresh_from_db()
+        privacy.refresh_from_db()
+        self.assertEqual(team.link_title, 'Команда')
+        self.assertEqual(privacy.link_title, 'Моя подпись')
+
+    def test_populate_link_titles_uses_reviewed_service_label(self):
+        from pages.management.commands.populate_link_titles import suggested_link_title
+
+        page = Page(
+            title='Бережная смывка. 1-2 тона | Black. Way Out (длинные волосы)',
+            url_path='uslugi/color-level-up/berezhnaya-smyvka-1-2-tona-black-way-out-dlinnye-volosy',
+        )
+        self.assertEqual(suggested_link_title(page), 'Бережная смывка. 1-2 тона (длинные волосы)')
+
+    def test_service_category_menu_uses_page_link_title(self):
+        root = Page.objects.get(url_path='uslugi')
+        page = Page.objects.create(title='Окрашивание в два этапа | Color. Level Up',
+                                   link_title='Окрашивание в два этапа',
+                                   url='color-level-up', parent=root)
+        category = ServiceCategory.objects.create(title=page.title, code='color-level-up', page=page)
+        from services.serializers import ServiceCategorySerializer
+
+        self.assertEqual(ServiceCategorySerializer(category).data['link_title'],
+                         'Окрашивание в два этапа')
+
     def test_copied_master_bio_cleanup_preserves_edited_page_content(self):
         team = Page.objects.create(title='Команда', url='team')
         copied_page = Page.objects.create(title='Автоматическая', url='copied', parent=team)

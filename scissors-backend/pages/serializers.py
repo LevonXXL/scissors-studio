@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from core_utils.drf_fields import FilerImageUrlField
 from masters.models import Master
+from masters.constants import TEST_MASTER_SLUG_PREFIX
 
 from .models import Page, PagePicture
 
@@ -26,28 +27,54 @@ class PageListSerializer(serializers.ModelSerializer):
     """Компактная версия — для меню и списков (карточка страницы с кратким описанием)."""
 
     title_tag = serializers.ReadOnlyField()
+    link_title = serializers.CharField(source='effective_link_title', read_only=True)
 
     class Meta:
         model = Page
-        fields = ('id', 'title', 'title_tag', 'meta_description', 'url', 'url_path', 'parent', 'position')
+        fields = ('id', 'title', 'link_title', 'title_tag', 'meta_description', 'url', 'url_path', 'parent', 'position')
 
 
 class MasterPageSerializer(serializers.ModelSerializer):
     photo = FilerImageUrlField(read_only=True)
+    service_work_photos = serializers.SerializerMethodField()
+
+    def get_service_work_photos(self, master):
+        request = self.context.get('request')
+        return [
+            {
+                'id': photo.pk,
+                'service_id': photo.service_id,
+                'service_title': photo.service.title,
+                'service_url_path': photo.service.page.url_path if photo.service.page_id else '',
+                'image': request.build_absolute_uri(photo.image.url) if request else photo.image.url,
+                'caption': photo.caption,
+            }
+            for photo in master.service_work_photos.all()
+            if photo.image_id and photo.service.is_active and photo.service.category.is_active
+        ]
 
     class Meta:
         model = Master
-        fields = ('name', 'photo', 'bio')
+        fields = ('name', 'photo', 'bio', 'service_work_photos')
 
 
 class PageDetailSerializer(serializers.ModelSerializer):
     """Полная версия — для рендера самой страницы."""
 
     title_tag = serializers.ReadOnlyField()
+    link_title = serializers.CharField(source='effective_link_title', read_only=True)
+    breadcrumbs = serializers.SerializerMethodField()
     pictures = PagePictureSerializer(many=True, read_only=True)
     master = serializers.SerializerMethodField()
     booking_target = serializers.SerializerMethodField()
     yclients_booking_links = serializers.SerializerMethodField()
+
+    def get_breadcrumbs(self, page):
+        return [
+            {'link_title': node.effective_link_title, 'url_path': node.url_path}
+            for node in page.get_ancestors(include_self=True)
+            if node.url_path  # The frontend supplies the common home crumb.
+        ]
 
     def get_master(self, page):
         master = getattr(page, 'master', None)
@@ -83,7 +110,7 @@ class PageDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Page
         fields = (
-            'id', 'title', 'title_tag', 'content', 'meta_title', 'meta_description',
+            'id', 'title', 'link_title', 'breadcrumbs', 'title_tag', 'content', 'meta_title', 'meta_description',
             'url', 'url_path', 'parent', 'pictures', 'master', 'booking_target', 'yclients_booking_links',
         )
 
@@ -100,6 +127,8 @@ class PageViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = Page.objects.filter(is_published=True).exclude(
         Q(master__is_booking_placeholder=True) |
+        Q(master__slug__startswith=TEST_MASTER_SLUG_PREFIX) |
+        Q(url__startswith=TEST_MASTER_SLUG_PREFIX) |
         Q(service_category__is_active=False) |
         Q(service__is_active=False) |
         Q(service__category__is_active=False)
@@ -112,7 +141,11 @@ class PageViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'], url_path=r'by-path(?:/(?P<url_path>.+))?')
     def by_path(self, request, url_path=None):
-        page = self.get_queryset().select_related('master__photo').prefetch_related('pictures__image').filter(
+        page = self.get_queryset().select_related('master__photo').prefetch_related(
+            'pictures__image', 'master__service_work_photos__image',
+            'master__service_work_photos__service__page',
+            'master__service_work_photos__service__category',
+        ).filter(
             url_path=(url_path or '').strip('/'),
         ).first()
         if page is None:

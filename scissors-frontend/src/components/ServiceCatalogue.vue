@@ -64,7 +64,7 @@
                   </div>
                   <p v-if="service.conditions" class="q-mt-md" style="white-space:pre-line">{{ service.conditions }}</p>
                   <p v-if="service.masters.length" class="text-caption q-mt-md">
-                    Специалисты: <span v-for="(master, index) in service.masters" :key="master.id">{{ index ? ', ' : '' }}{{ master.name }}<span v-if="master.amount !== null"> — {{ formatPrice(master.amount) }} ₽</span><span v-else> — цена для мастера уточняется</span></span>
+                    Специалисты: <span v-for="(master, index) in service.masters" :key="master.id">{{ index ? ', ' : '' }}{{ master.name }}<span v-if="master.amount !== null"> — {{ formatPrice(master.amount) }} ₽</span><span v-else> — цена для мастера уточняется</span><span v-if="master.duration_seconds != null && master.duration_seconds !== service.duration_seconds"> · {{ formatDuration(master.duration_seconds) }}</span></span>
                   </p>
                   <div class="row q-gutter-sm q-mt-md">
                     <q-btn v-if="mode !== 'service'" flat no-caps color="primary" label="Подробнее" :to="`/${service.url_path}`" />
@@ -104,8 +104,8 @@ import FeedbackRequestForm from '@/components/FeedbackRequestForm.vue';
 import ImageLightbox from '@/components/ImageLightbox.vue';
 
 interface Price { level: string; amount: string }
-interface MasterPrice { id: number; name: string; level: string; amount: string | null }
-interface Service { id: number; title: string; description: string; group_title: string; subgroup_title: string; conditions: string; duration_display: string; url_path: string; image: string; prices: Price[]; masters: MasterPrice[] }
+interface MasterPrice { id: number; name: string; level: string; amount: string | null; duration_seconds: number | null }
+interface Service { id: number; title: string; description: string; group_title: string; subgroup_title: string; conditions: string; duration_seconds: number | null; duration_display: string; url_path: string; image: string; prices: Price[]; masters: MasterPrice[] }
 interface Category { id: number; title: string; code: string; image_url: string; group_images: { name: string; url: string }[]; url_path: string; services: Service[] }
 interface Salon { id: number; name: string; slug: string; yclients_booking_url: string }
 
@@ -173,6 +173,9 @@ const groups = computed(() => {
 const labels: Record<string, string> = { universal: 'Универсал', modeler: 'Модельер', stylist: 'Стилист', top_stylist: 'Топ-стилист', art_director: 'Арт-директор', nail_master: 'Мастер', top_nail_master: 'Топ-мастер', '': 'Стоимость' };
 const levelLabel = (level: string) => labels[level] || level;
 const formatPrice = (value: string | null) => value == null ? '' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+const formatDuration = (seconds: number) => seconds % 60 === 0
+  ? `${seconds / 60} мин`
+  : `${Math.floor(seconds / 60)} мин ${seconds % 60} сек`;
 
 // Route preFetch fills Pinia before SSR rendering and client navigation.
 onServerPrefetch(() => serviceStore.loadForPath(props.path));

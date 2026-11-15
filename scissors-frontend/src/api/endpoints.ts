@@ -27,6 +27,7 @@ export async function fetchSearch(query: string, page = 1, pageSize = 30): Promi
 export interface CatalogueCategorySummary {
   id: number;
   title: string;
+  link_title: string;
   code: string;
   image_url: string;
   image_path: string;

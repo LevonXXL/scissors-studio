@@ -49,6 +49,15 @@ class ThumbnailTests(SimpleTestCase):
         self.assertEqual(self.client.get('/thumbnail/3000/filer_public/sample.jpg').status_code, 400)
         with self.assertRaises(Http404):
             _paths(300, 'filer_public/../sample.jpg')
+        with self.assertRaises(Http404):
+            _paths(300, 'filer_public/..\\sample.jpg')
+
+        outside = self.source.parents[1] / 'outside.jpg'
+        outside.write_bytes(self.source.read_bytes())
+        self.source.unlink()
+        self.source.symlink_to(outside)
+        with self.assertRaises(Http404):
+            _paths(300, 'filer_public/sample.jpg')
 
     def test_rejects_invalid_and_oversized_images(self):
         self.source.write_bytes(b'not an image')

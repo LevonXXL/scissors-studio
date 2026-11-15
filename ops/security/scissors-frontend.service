@@ -1,0 +1,33 @@
+[Unit]
+Description=Scissors Quasar SSR frontend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scissors-frontend
+Group=scissors-frontend
+WorkingDirectory=/home/scissors/current/scissors-frontend/dist/ssr
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /home/scissors/current/scissors-frontend/dist/ssr/index.js
+Restart=always
+RestartSec=10
+UMask=0022
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+BindReadOnlyPaths=/home/scissors/current:/home/scissors/current
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scissors-frontend
+
+[Install]
+WantedBy=multi-user.target

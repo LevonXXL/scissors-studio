@@ -1,9 +1,11 @@
 from importlib import import_module
 
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from salons.models import Salon
+from services.price_levels import LEVEL_LABELS, MASTER_PRICE_LEVEL_CHOICES
 from .models import Master, MasterSalon
 
 
@@ -28,6 +30,13 @@ class NailLevelMigrationTests(TestCase):
 
 
 class MasterCatalogueTests(TestCase):
+    def test_master_levels_match_excel_and_reject_unknown_level(self):
+        self.assertEqual(tuple(Master.PRICE_LEVEL_CHOICES), MASTER_PRICE_LEVEL_CHOICES)
+        self.assertTrue(all(label == LEVEL_LABELS[level] for level, label in
+                            Master.PRICE_LEVEL_CHOICES))
+        with self.assertRaises(ValidationError):
+            Master.objects.create(name='Мастер', price_level='unknown')
+
     def test_api_returns_confirmed_price_level(self):
         master = Master.objects.create(name='Мастер', yclients_user_id='price-level-test',
                                        price_level='top_stylist')

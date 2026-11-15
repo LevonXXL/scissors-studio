@@ -1,10 +1,6 @@
 <template>
   <q-page class="site-page q-px-md q-py-xl">
     <template v-if="salon">
-      <nav class="text-caption text-grey-7 q-mb-md" aria-label="Хлебные крошки">
-        <router-link to="/">Главная</router-link> / <router-link to="/salons">Салоны</router-link> / {{ salon.name }}
-      </nav>
-
       <h1 class="text-h4 text-weight-bold q-mb-md">{{ salon.page?.title || salon.name }}</h1>
       <div v-if="salon.page?.content" class="text-body1 q-mb-xl" v-html="salon.page.content" />
       <p v-else-if="descriptionText" class="text-body1 q-mb-xl description-fallback">{{ descriptionText }}</p>

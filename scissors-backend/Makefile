@@ -29,41 +29,19 @@ seed:
 
 # ============================================================
 # Scissors Studio Backend (Django)
-# Деплой через rsync без Git
+# Production deployment from the GitHub main branch
 # ============================================================
 
 # --- Переменные ---
 LOCAL_DIR = .
-REMOTE_USER = levon
+REMOTE_USER = scissors
+REMOTE_ADMIN_USER = levon
 REMOTE_HOST = chinese-russian.com
-REMOTE_PATH = /opt/scissors-backend
+REMOTE_PATH = /home/scissors
 SERVICE_NAME = scissors-backend
-VENV_DIR = .venv
-
-# Команда для запуска Django на сервере с активацией venv
-# (DJANGO_SETTINGS_MODULE указан явно для надежности, но можно убрать, если он есть в .env)
-REMOTE_DJANGO = cd $(REMOTE_PATH) && source $(VENV_DIR)/bin/activate && export DJANGO_SETTINGS_MODULE=scissors_studio.settings && python manage.py
-
-# Rsync с игнорированием проверки хоста для автоматизации
-RSYNC_CMD = rsync -av --delete -e "ssh -o StrictHostKeyChecking=no"
-
-# Исключаемые файлы и папки (не копируем виртуальное окружение, медиа, секреты и кэш)
-RSYNC_EXCLUDES = \
-	--exclude='.idea' \
-	--exclude='.vscode' \
-	--exclude='.venv' \
-	--exclude='venv' \
-	--exclude='media/' \
-	--exclude='.env' \
-	--exclude='.env.local' \
-	--exclude='.env.*' \
-	--exclude='__pycache__' \
-	--exclude='*.pyc' \
-	--exclude='*.pyo' \
-	--exclude='db.sqlite3' \
-	--exclude='*.log' \
-	--exclude='.DS_Store' \
-	--exclude='staticfiles/'
+DEPLOY_HELPER = ../ops/deploy/scissors-git-deploy.sh
+SSH_DEPLOY = ssh -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+SCP_DEPLOY = scp -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
 
 # ============================================================
 # Цели
@@ -71,95 +49,87 @@ RSYNC_EXCLUDES = \
 
 .PHONY: sync-dry-run
 sync-dry-run:
-	@echo "[SYNC-DRY-RUN] Проверка синхронизации $(LOCAL_DIR)/ -> $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/"
-	$(RSYNC_CMD) $(RSYNC_EXCLUDES) --dry-run $(LOCAL_DIR)/ $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
+	git ls-remote origin refs/heads/main
 
 .PHONY: sync-prod
 sync-prod:
-	@echo "[SYNC-PROD] Синхронизация $(LOCAL_DIR)/ -> $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/"
-	$(RSYNC_CMD) $(RSYNC_EXCLUDES) $(LOCAL_DIR)/ $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/
-	@echo "[SYNC-PROD] Синхронизация завершена."
+	@$(SCP_DEPLOY) $(DEPLOY_HELPER) $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/scissors-git-deploy.sh
+	@$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "chmod 0750 $(REMOTE_PATH)/scissors-git-deploy.sh && bash $(REMOTE_PATH)/scissors-git-deploy.sh deploy main"
 
 .PHONY: install-reqs
 install-reqs:
-	@echo "[INSTALL] Установка зависимостей (requirements.txt) на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "cd $(REMOTE_PATH) && source $(VENV_DIR)/bin/activate && pip install -r requirements.txt --upgrade"
-	@echo "[INSTALL] Зависимости обновлены."
+	@echo "Зависимости устанавливаются из Git-релиза при make deploy."
 
 .PHONY: check
 check:
-	@echo "[CHECK] Проверка настроек Django на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "$(REMOTE_DJANGO) check"
-	@echo "[CHECK] Проверка пройдена."
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "systemctl is-active $(SERVICE_NAME).service"
 
 .PHONY: migrate
 migrate:
-	@echo "[MIGRATE] Применение миграций на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "$(REMOTE_DJANGO) migrate --noinput"
-	@echo "[MIGRATE] Миграции применены."
+	@echo "Миграции выполняются служебным пользователем при перезапуске backend."
 
 .PHONY: collectstatic
 collectstatic:
-	@echo "[COLLECTSTATIC] Сбор статических файлов на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "$(REMOTE_DJANGO) collectstatic --noinput"
-	@echo "[COLLECTSTATIC] Статика собрана."
+	@echo "collectstatic выполняется служебным пользователем при перезапуске backend."
 
 .PHONY: restart
 restart:
 	@echo "[RESTART] Перезапуск сервиса $(SERVICE_NAME) на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo systemctl restart $(SERVICE_NAME)"
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "sudo -n /usr/bin/systemctl restart $(SERVICE_NAME).service"
 	@echo "[RESTART] Сервис перезапущен."
 
 .PHONY: status
 status:
 	@echo "[STATUS] Статус сервиса $(SERVICE_NAME) на $(REMOTE_HOST)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo systemctl status $(SERVICE_NAME) --no-pager"
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "systemctl status $(SERVICE_NAME).service --no-pager"
 
 .PHONY: logs
 logs:
 	@echo "[LOGS] Последние 100 строк лога сервиса $(SERVICE_NAME)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo journalctl -u $(SERVICE_NAME) -n 100 --no-pager"
+	ssh $(REMOTE_ADMIN_USER)@$(REMOTE_HOST) "sudo -n journalctl -u $(SERVICE_NAME).service -n 100 --no-pager"
 
 .PHONY: logs-f
 logs-f:
 	@echo "[LOGS-F] Live-логи сервиса $(SERVICE_NAME) (Ctrl+C для выхода)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo journalctl -u $(SERVICE_NAME) -f"
+	ssh $(REMOTE_ADMIN_USER)@$(REMOTE_HOST) "sudo -n journalctl -u $(SERVICE_NAME).service -f"
 
 # ============================================================
 # Деплой
 # ============================================================
 
 .PHONY: deploy
-deploy: sync-prod install-reqs check migrate collectstatic restart
+deploy: sync-prod
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ Деплой бэкенда Scissors Studio завершён!"
 	@echo "=========================================="
 
-# Быстрый деплой без миграций и статики (только код + зависимости + рестарт)
+# Быстрый Git-деплой: обновление релиза и перезапуск приложения.
 .PHONY: deploy-fast
-deploy-fast: sync-prod install-reqs restart
+deploy-fast: sync-prod
 	@echo "[DEPLOY-FAST] Быстрый деплой завершён."
 
-# Откат: перезапуск сервиса (если нужно быстро вернуть рабочую версию после неудачного деплоя)
+# Откат выполняется возвратом current symlink к предыдущему Git-релизу.
 .PHONY: rollback
 rollback:
-	@echo "[ROLLBACK] Откат: перезапуск сервиса $(SERVICE_NAME)"
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo systemctl restart $(SERVICE_NAME)"
-	@echo "[ROLLBACK] Сервис перезапущен."
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "bash $(REMOTE_PATH)/scissors-git-deploy.sh rollback"
+
+.PHONY: snapshots
+snapshots:
+	$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "ls -1dt $(REMOTE_PATH)/releases/*"
 
 .PHONY: help
 help:
 	@echo "🚀 Scissors Backend — команды деплоя"
 	@echo ""
 	@echo "Деплой:"
-	@echo "  deploy         - Полный деплой: sync → install → check → migrate → collectstatic → restart"
-	@echo "  deploy-fast    - Быстрый деплой: sync → install → restart (без миграций и статики)"
-	@echo "  rollback       - Перезапуск сервиса (для быстрого отката состояния)"
+	@echo "  deploy         - Git-деплой main с подготовкой релиза, сборкой и проверкой сервисов"
+	@echo "  deploy-fast    - Быстрый Git-деплой main"
+	@echo "  rollback       - Переключение на предыдущий Git-релиз"
 	@echo ""
 	@echo "Синхронизация:"
 	@echo "  sync-dry-run   - Тестовая синхронизация (без реальных изменений)"
-	@echo "  sync-prod      - Реальная синхронизация файлов через rsync"
+	@echo "  sync-prod      - Получение Git-релиза на сервере"
 	@echo ""
 	@echo "Django на сервере:"
 	@echo "  install-reqs   - Обновление pip пакетов из requirements.txt"
