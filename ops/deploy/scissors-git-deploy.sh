@@ -75,9 +75,9 @@ VITE_SITE_URL=https://studio.scissors.group \
 VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
 VITE_STATIC_URL=https://studio.static.scissors.group/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
-"$NODE_HOME/bin/npm" run build
+"$NODE_HOME/bin/npm" run build -- -m ssr
 
-rsync -a --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
+rsync -a --no-owner --no-group --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 cat > "$ROOT/static/robots.txt" <<'ROBOTS'
 User-agent: *
 Allow: /
