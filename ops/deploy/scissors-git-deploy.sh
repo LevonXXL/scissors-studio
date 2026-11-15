@@ -88,7 +88,7 @@ if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
 fi
 
-rsync -a --no-owner --no-group --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
+rsync -a --no-owner --no-group --no-times --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 cat > "$ROOT/static/robots.txt" <<'ROBOTS'
 User-agent: *
 Allow: /
