@@ -11,8 +11,8 @@ export default defineConfig((ctx) => {
   const apiOrigin = process.env.API_ORIGIN
     || (ctx.dev ? 'http://localhost:8000' : 'https://api.studio.scissors.group');
   const apiBaseUrl = viteEnv.VITE_API_BASE_URL || `${apiOrigin.replace(/\/$/, '')}/api/v1`;
-  // Empty STATIC_URL keeps images from public/ on the frontend's own origin.
-  const staticUrl = viteEnv.VITE_STATIC_URL || (ctx.dev ? '' : 'https://studio.static.scissors.group/');
+  // The static host serves Django/public assets below /static/.
+  const staticUrl = viteEnv.VITE_STATIC_URL || (ctx.dev ? '' : 'https://studio.static.scissors.group/static/');
   const configuredMediaUrl = viteEnv.VITE_MEDIA_URL
     || (ctx.dev ? '/media/' : 'https://studio.static.scissors.group/media/');
   const mediaBase = new URL(configuredMediaUrl, new URL(apiBaseUrl).origin);

@@ -78,7 +78,7 @@ SITE_URL=https://studio.scissors.group \
 API_ORIGIN=https://api.studio.scissors.group \
 VITE_SITE_URL=https://studio.scissors.group \
 VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
-VITE_STATIC_URL=https://studio.static.scissors.group/ \
+VITE_STATIC_URL=https://studio.static.scissors.group/static/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
 "$NODE_HOME/bin/npm" run build -- -m ssr || BUILD_STATUS=$?
 if [[ -d "$TILDA_BUILD_HOLD" ]]; then
