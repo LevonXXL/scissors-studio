@@ -21,7 +21,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOME=/home/scissors/tmp
 ExecStartPre=/home/scissors/current/scissors-backend/.venv/bin/python manage.py migrate --noinput
 ExecStartPre=/home/scissors/current/scissors-backend/.venv/bin/python manage.py collectstatic --noinput
-ExecStart=/home/scissors/current/scissors-backend/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8553 --capture-output --error-logfile - --access-logfile - scissors_studio.wsgi:application
+ExecStart=/home/scissors/current/scissors-backend/.venv/bin/python -m gunicorn --workers 3 --bind 127.0.0.1:8553 --capture-output --error-logfile - --access-logfile - scissors_studio.wsgi:application
 Restart=always
 RestartSec=10
 UMask=0007
