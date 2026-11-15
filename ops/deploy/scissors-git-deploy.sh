@@ -87,6 +87,8 @@ fi
 if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
 fi
+"$NODE_HOME/bin/npm" prune --omit=dev
+rm -rf "$RELEASE/scissors-frontend/src-pwa/node_modules"
 if [[ ! -L "$RELEASE/scissors-frontend/dist/ssr/node_modules" ]]; then
     ln -s ../../src-ssr/node_modules "$RELEASE/scissors-frontend/dist/ssr/node_modules"
 fi
@@ -130,5 +132,8 @@ if ! systemctl is-active --quiet scissors-backend.service \
     rollback
     exit 1
 fi
+
+"$NODE_HOME/bin/npm" cache clean --force >/dev/null 2>&1 || true
+"$RELEASE/scissors-backend/.venv/bin/python" -m pip cache purge >/dev/null 2>&1 || true
 
 echo "Deployed $COMMIT"
