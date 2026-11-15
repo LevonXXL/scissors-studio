@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.contrib import messages
 from django import forms
@@ -247,9 +249,14 @@ class MasterAdmin(admin.ModelAdmin):
         if not self.has_change_permission(request, master):
             raise PermissionDenied
         code = None
+        code_lifetime = None
         if request.method == 'POST':
             if request.POST.get('action') == 'generate':
                 code = create_pairing_code(master)
+                code_lifetime = '15 минут'
+            elif request.POST.get('action') == 'generate_daily':
+                code = create_pairing_code(master, validity=timedelta(days=1))
+                code_lifetime = '24 часа'
             elif request.POST.get('action') == 'disconnect':
                 account = get_object_or_404(MasterMessengerAccount,
                                             pk=request.POST.get('account_id'), master=master)
@@ -259,7 +266,8 @@ class MasterAdmin(admin.ModelAdmin):
         return render(request, 'admin/masters/master/messenger.html', {
             **self.admin_site.each_context(request),
             'title': f'Мессенджеры мастера {master.name}', 'master': master,
-            'code': code, 'accounts': master.messenger_accounts.all(), 'opts': self.model._meta,
+            'code': code, 'code_lifetime': code_lifetime,
+            'accounts': master.messenger_accounts.all(), 'opts': self.model._meta,
         })
 
     def edit_service_work(self, request, object_id):

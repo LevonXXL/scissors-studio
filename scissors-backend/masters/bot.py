@@ -6,6 +6,7 @@ import ipaddress
 import logging
 import secrets
 import socket
+from datetime import timedelta
 from urllib.parse import quote, urlparse
 
 import requests
@@ -35,13 +36,12 @@ def pairing_digest(code):
     return hashlib.sha256(code.encode('utf-8')).hexdigest()
 
 
-def create_pairing_code(master):
-    from datetime import timedelta
+def create_pairing_code(master, *, validity=timedelta(minutes=15)):
     code = secrets.token_urlsafe(18)
     MasterMessengerPairingCode.objects.filter(master=master, used_at__isnull=True).delete()
     MasterMessengerPairingCode.objects.create(
         master=master, digest=pairing_digest(code),
-        expires_at=timezone.now() + timedelta(minutes=15),
+        expires_at=timezone.now() + validity,
     )
     return code
 

@@ -3,12 +3,14 @@
 {% block content %}
 <div style="max-width:800px">
   <p><a href="{% url 'admin:masters_master_change' master.pk %}">← Профиль мастера</a></p>
-  <p>Код подключает личный чат Telegram или MAX к этому мастеру. Передайте его только самому мастеру. Код действует 15 минут и используется один раз.</p>
+  <p>Код подключает личный чат Telegram или MAX к этому мастеру. Передайте его только самому мастеру. Код используется один раз; выпуск нового кода отменяет предыдущий неиспользованный код.</p>
   <form method="post">{% csrf_token %}
     {% component "unfold/components/button.html" with submit=1 name="action" value="generate" variant="primary" %}Создать код подключения{% endcomponent %}
+    {% component "unfold/components/button.html" with submit=1 name="action" value="generate_daily" variant="secondary" %}Создать код на сутки{% endcomponent %}
   </form>
   {% if code %}<div style="margin:20px 0;padding:16px;border:1px solid #2563eb;border-radius:8px">
     <strong>Код: {{ code }}</strong><br>
+    Действует {{ code_lifetime }}.<br>
     Отправьте боту в личном чате: <code>/link {{ code }}</code><br>
     После ухода со страницы код больше не показывается.
   </div>{% endif %}
