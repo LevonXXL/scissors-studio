@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ACTION="${1:-deploy}"
 BRANCH="${2:-main}"
 ROOT=/home/scissors
+NODE_HOME="$ROOT/runtime/node-v22.23.5-linux-x64"
 REPOSITORY="$ROOT/repository"
 RELEASES="$ROOT/releases"
 CURRENT="$ROOT/current"
@@ -66,14 +67,15 @@ python3 -m venv "$RELEASE/scissors-backend/.venv"
 "$RELEASE/scissors-backend/.venv/bin/python" -m pip install --disable-pip-version-check -r "$RELEASE/scissors-backend/requirements.txt"
 
 cd "$RELEASE/scissors-frontend"
-npm ci --include=dev
+export PATH="$NODE_HOME/bin:$PATH"
+"$NODE_HOME/bin/npm" ci --include=dev
 SITE_URL=https://studio.scissors.group \
 API_ORIGIN=https://api.studio.scissors.group \
 VITE_SITE_URL=https://studio.scissors.group \
 VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
 VITE_STATIC_URL=https://studio.static.scissors.group/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
-npm run build
+"$NODE_HOME/bin/npm" run build
 
 rsync -a --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 cat > "$ROOT/static/robots.txt" <<'ROBOTS'

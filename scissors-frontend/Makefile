@@ -5,7 +5,7 @@
 
 # --- Локальные настройки ---
 
-NODE_VERSION = 22.22.0
+NODE_VERSION = 22.23.5
 LOCAL_DIST_DIR = dist/ssr
 
 

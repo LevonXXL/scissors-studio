@@ -9,7 +9,7 @@ User=scissors-frontend
 Group=scissors-frontend
 WorkingDirectory=/home/scissors/current/scissors-frontend/dist/ssr
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node /home/scissors/current/scissors-frontend/dist/ssr/index.js
+ExecStart=/home/scissors/runtime/node-v22.23.5-linux-x64/bin/node /home/scissors/current/scissors-frontend/dist/ssr/index.js
 Restart=always
 RestartSec=10
 UMask=0022
@@ -25,6 +25,7 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 BindReadOnlyPaths=/home/scissors/current:/home/scissors/current
+BindReadOnlyPaths=/home/scissors/runtime/node-v22.23.5-linux-x64:/home/scissors/runtime/node-v22.23.5-linux-x64
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=scissors-frontend
