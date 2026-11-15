@@ -69,13 +69,24 @@ python3 -m venv "$RELEASE/scissors-backend/.venv"
 cd "$RELEASE/scissors-frontend"
 export PATH="$NODE_HOME/bin:$PATH"
 "$NODE_HOME/bin/npm" ci --include=dev
+TILDA_ASSETS="$RELEASE/scissors-frontend/public/tilda_assets"
+TILDA_BUILD_HOLD="$RELEASE/.tilda-assets-build-hold"
+if [[ -d "$TILDA_ASSETS" ]]; then
+    mv "$TILDA_ASSETS" "$TILDA_BUILD_HOLD"
+fi
 SITE_URL=https://studio.scissors.group \
 API_ORIGIN=https://api.studio.scissors.group \
 VITE_SITE_URL=https://studio.scissors.group \
 VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
 VITE_STATIC_URL=https://studio.static.scissors.group/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
-"$NODE_HOME/bin/npm" run build -- -m ssr
+"$NODE_HOME/bin/npm" run build -- -m ssr || BUILD_STATUS=$?
+if [[ -d "$TILDA_BUILD_HOLD" ]]; then
+    mv "$TILDA_BUILD_HOLD" "$TILDA_ASSETS"
+fi
+if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
+    exit "$BUILD_STATUS"
+fi
 
 rsync -a --no-owner --no-group --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 cat > "$ROOT/static/robots.txt" <<'ROBOTS'
