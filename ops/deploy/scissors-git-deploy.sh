@@ -90,6 +90,10 @@ fi
 if [[ ! -L "$RELEASE/scissors-frontend/dist/ssr/node_modules" ]]; then
     ln -s ../../src-ssr/node_modules "$RELEASE/scissors-frontend/dist/ssr/node_modules"
 fi
+if [[ ! -x "$RELEASE/scissors-backend/.venv/bin/gunicorn" || ! -f "$RELEASE/scissors-frontend/dist/ssr/index.js" ]]; then
+    echo "Refusing deploy: backend server or frontend SSR entrypoint is missing" >&2
+    exit 1
+fi
 
 rsync -a --no-owner --no-group --no-times --no-perms "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 chgrp -R scissors-runtime "$RELEASE"
