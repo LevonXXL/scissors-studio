@@ -88,17 +88,7 @@ if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
 fi
 
-rsync -a --no-owner --no-group --no-times --chmod=Du=rwx,Dg=rx,Do=,Fu=rw,Fg=r,Fo= "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
-cat > "$ROOT/static/robots.txt" <<'ROBOTS'
-User-agent: *
-Allow: /
-Disallow: /login
-Disallow: /admin/
-Disallow: /api/
-
-Sitemap: https://studio.scissors.group/sitemap.xml
-ROBOTS
-chmod 0640 "$ROOT/static/robots.txt"
+rsync -a --no-owner --no-group --no-times --no-perms "$RELEASE/scissors-frontend/public/" "$ROOT/static/"
 chgrp -R scissors-runtime "$RELEASE"
 find "$RELEASE" -type d -exec chmod 0750 {} +
 find "$RELEASE" -type f -perm /111 -exec chmod 0750 {} +
