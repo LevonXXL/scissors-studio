@@ -137,9 +137,18 @@ if ! sudo -n /usr/bin/systemctl restart scissors-backend.service \
     exit 1
 fi
 
-if ! systemctl is-active --quiet scissors-backend.service \
-    || ! systemctl is-active --quiet scissors-frontend.service \
-    || ! curl --fail --silent --show-error http://127.0.0.1:4000/ -o /dev/null; then
+HEALTHY=0
+for attempt in {1..30}; do
+    if systemctl is-active --quiet scissors-backend.service \
+        && systemctl is-active --quiet scissors-frontend.service \
+        && curl --fail --silent http://127.0.0.1:4000/ -o /dev/null; then
+        HEALTHY=1
+        break
+    fi
+    sleep 1
+done
+
+if [[ "$HEALTHY" -ne 1 ]]; then
     rollback
     exit 1
 fi
