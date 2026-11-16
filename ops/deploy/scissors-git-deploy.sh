@@ -10,6 +10,7 @@ RELEASES="$ROOT/releases"
 CURRENT="$ROOT/current"
 IMPORT_PHOTOS="$ROOT/imports/service-photos"
 PUBLIC_IMPORT_PHOTOS="$ROOT/static/tilda_assets"
+FRONTEND_BUILD_ENV="$ROOT/frontend-build.env"
 REPO_URL=git@github.com:LevonXXL/scissors-studio.git
 GIT_SSH_COMMAND="ssh -i /etc/scissors/github_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 export GIT_SSH_COMMAND
@@ -69,6 +70,16 @@ if [[ ! -d "$IMPORT_PHOTOS" ]]; then
     echo "Refusing deploy: private service photo archive is missing: $IMPORT_PHOTOS" >&2
     exit 1
 fi
+if [[ ! -r "$FRONTEND_BUILD_ENV" ]]; then
+    echo "Refusing deploy: frontend build config is missing or unreadable: $FRONTEND_BUILD_ENV" >&2
+    exit 1
+fi
+VITE_YANDEX_MAPS_API_KEY="$(awk -F= '$1 == "VITE_YANDEX_MAPS_API_KEY" { sub(/^[^=]*=/, ""); print; exit }' "$FRONTEND_BUILD_ENV")"
+if [[ -z "$VITE_YANDEX_MAPS_API_KEY" ]]; then
+    echo "Refusing deploy: VITE_YANDEX_MAPS_API_KEY is missing from frontend build config" >&2
+    exit 1
+fi
+export VITE_YANDEX_MAPS_API_KEY
 if [[ -e "$PUBLIC_IMPORT_PHOTOS" ]]; then
     echo "Refusing deploy: service photo archive must not be in public static: $PUBLIC_IMPORT_PHOTOS" >&2
     exit 1
@@ -101,6 +112,10 @@ VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
 "$NODE_HOME/bin/npm" run build -- -m ssr || BUILD_STATUS=$?
 if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
+fi
+if ! grep -RFlq -- "$VITE_YANDEX_MAPS_API_KEY" "$RELEASE/scissors-frontend/dist/ssr/client"; then
+    echo "Refusing deploy: Yandex Maps API key did not reach the compiled frontend bundle" >&2
+    exit 1
 fi
 "$NODE_HOME/bin/npm" prune --omit=dev
 rm -rf "$RELEASE/scissors-frontend/src-pwa/node_modules"
