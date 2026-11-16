@@ -52,7 +52,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--source-path', required=True,
-                            help='Каталог tilda_assets; путь может отличаться на продакшене.')
+                            help='Каталог исходных фото; production: /home/scissors/imports/service-photos.')
         parser.add_argument('--apply', action='store_true',
                             help='Применить найденные соответствия. Без флага команда только показывает план.')
 

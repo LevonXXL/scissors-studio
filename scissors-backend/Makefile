@@ -42,6 +42,8 @@ SERVICE_NAME = scissors-backend
 DEPLOY_HELPER = ../ops/deploy/scissors-git-deploy.sh
 SSH_DEPLOY = ssh -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
 SCP_DEPLOY = scp -i ~/.ssh/scissors-crc -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+IMPORT_PHOTOS_REMOTE = /home/scissors/imports/service-photos
+RSYNC_OPTS ?=
 
 # ============================================================
 # Цели
@@ -52,7 +54,7 @@ sync-dry-run:
 	git ls-remote origin refs/heads/main
 
 .PHONY: sync-prod
-# Deployment uses the shared Git helper; persistent Tilda assets live only in /home/scissors/static/tilda_assets.
+# Deployment uses the shared Git helper; private source photos are synced separately.
 sync-prod:
 	@$(SCP_DEPLOY) $(DEPLOY_HELPER) $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/scissors-git-deploy.sh
 	@$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "chmod 0750 $(REMOTE_PATH)/scissors-git-deploy.sh && bash $(REMOTE_PATH)/scissors-git-deploy.sh deploy main"
@@ -60,6 +62,10 @@ sync-prod:
 .PHONY: install-reqs
 install-reqs:
 	@echo "Зависимости устанавливаются из Git-релиза при make deploy."
+
+.PHONY: sync-import-photos
+sync-import-photos:
+	@python3 ../ops/deploy/list_service_import_photos.py | rsync -a --files-from=- --no-owner --no-group --no-times --no-perms $(RSYNC_OPTS) -e "$(SSH_DEPLOY)" --rsync-path='umask 0027; mkdir -p $(IMPORT_PHOTOS_REMOTE) && rsync' ../scissors-frontend/tilda_assets/ $(REMOTE_USER)@$(REMOTE_HOST):$(IMPORT_PHOTOS_REMOTE)/
 
 .PHONY: check
 check:
@@ -127,6 +133,7 @@ help:
 	@echo "  deploy         - Git-деплой main с подготовкой релиза, сборкой и проверкой сервисов"
 	@echo "  deploy-fast    - Быстрый Git-деплой main"
 	@echo "  rollback       - Переключение на предыдущий Git-релиз"
+	@echo "  sync-import-photos - Отдельная синхронизация фото для импорта Django"
 	@echo ""
 	@echo "Синхронизация:"
 	@echo "  sync-dry-run   - Тестовая синхронизация (без реальных изменений)"

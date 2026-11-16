@@ -72,7 +72,7 @@ export const masters: Master[] = [
     name: 'Рысовец Оксана',
     role: 'Топ-стилист',
     bio: 'Опыт работы в Scissors — более 3 лет. Самостоятельно выстраивает путь к желаемому образу клиента. Обучает команду и регулярно повышает квалификацию во внутренних и внешних школах. (Прим.: в исходном HTML Tilda описании Оксаны случайно продублировался текст основателя, здесь восстановлено стандартное описание Топ-стилиста).',
-    photo: 'https://static.tildacdn.com/tild3030-6264-4433-a233-373637633734/see-plus-SeKz_7CAQYY.png', // TODO: вставить реальную ссылку на фото Оксаны из tilda_assets
+    photo: 'https://static.tildacdn.com/tild3030-6264-4433-a233-373637633734/see-plus-SeKz_7CAQYY.png', // TODO: заменить ссылку на актуальное фото Оксаны
     salons: ['moscow'],
     bookingLink: 'https://n2080XXX.yclients.com', // TODO: уточнить реальную ссылку Yclients для Оксаны
     slug: 'rysovets-oksana',

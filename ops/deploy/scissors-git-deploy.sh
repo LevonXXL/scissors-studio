@@ -8,7 +8,8 @@ NODE_HOME="$ROOT/runtime/node-v22.23.5-linux-x64"
 REPOSITORY="$ROOT/repository"
 RELEASES="$ROOT/releases"
 CURRENT="$ROOT/current"
-TILDA_ASSETS="$ROOT/static/tilda_assets"
+IMPORT_PHOTOS="$ROOT/imports/service-photos"
+PUBLIC_IMPORT_PHOTOS="$ROOT/static/tilda_assets"
 REPO_URL=git@github.com:LevonXXL/scissors-studio.git
 GIT_SSH_COMMAND="ssh -i /etc/scissors/github_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 export GIT_SSH_COMMAND
@@ -64,13 +65,17 @@ if [[ ! -e "$RELEASE/.git" ]]; then
     git -C "$REPOSITORY" worktree add --detach "$RELEASE" "$COMMIT"
 fi
 
-if [[ ! -d "$TILDA_ASSETS" ]]; then
-    echo "Refusing deploy: canonical Tilda assets directory is missing: $TILDA_ASSETS" >&2
+if [[ ! -d "$IMPORT_PHOTOS" ]]; then
+    echo "Refusing deploy: private service photo archive is missing: $IMPORT_PHOTOS" >&2
+    exit 1
+fi
+if [[ -e "$PUBLIC_IMPORT_PHOTOS" ]]; then
+    echo "Refusing deploy: service photo archive must not be in public static: $PUBLIC_IMPORT_PHOTOS" >&2
     exit 1
 fi
 while IFS= read -r -d '' duplicate; do
-    if ! diff -qr --exclude=.DS_Store "$TILDA_ASSETS" "$duplicate" >/dev/null; then
-        echo "Refusing deploy: Tilda assets differ from canonical copy: $duplicate" >&2
+    if ! diff -qr --exclude=.DS_Store "$IMPORT_PHOTOS" "$duplicate" >/dev/null; then
+        echo "Refusing deploy: release photo archive differs from private import source: $duplicate" >&2
         exit 1
     fi
     rm -rf "$duplicate"
@@ -84,7 +89,7 @@ export PATH="$NODE_HOME/bin:$PATH"
 "$NODE_HOME/bin/npm" ci --include=dev
 RELEASE_TILDA_ASSETS="$RELEASE/scissors-frontend/public/tilda_assets"
 [[ ! -d "$RELEASE_TILDA_ASSETS" ]] || {
-    echo "Refusing deploy: Tilda assets unexpectedly appeared in the release after duplicate cleanup" >&2
+    echo "Refusing deploy: source photo archive unexpectedly appeared under frontend public/" >&2
     exit 1
 }
 SITE_URL=https://studio.scissors.group \

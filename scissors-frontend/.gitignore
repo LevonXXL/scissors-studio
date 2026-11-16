@@ -27,4 +27,5 @@ node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-public/tilda_assets
+# Raw source photos for the one-time backend import; never part of frontend public assets.
+tilda_assets/

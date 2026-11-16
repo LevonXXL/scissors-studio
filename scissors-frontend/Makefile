@@ -50,7 +50,7 @@ sync-dry-run:
 
 
 .PHONY: sync-prod
-# Deployment uses the shared Git helper; /static/tilda_assets is excluded from rsync and never overwritten.
+# Deployment uses the shared Git helper; private import photos are outside public/ and synced separately.
 sync-prod:
 	@$(SCP_DEPLOY) $(DEPLOY_HELPER) $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_PATH)/scissors-git-deploy.sh
 	@$(SSH_DEPLOY) $(REMOTE_USER)@$(REMOTE_HOST) "chmod 0750 $(REMOTE_PATH)/scissors-git-deploy.sh && bash $(REMOTE_PATH)/scissors-git-deploy.sh deploy main"
@@ -58,7 +58,7 @@ sync-prod:
 
 .PHONY: sync-public-static
 sync-public-static:
-	@echo "Файлы public/ копируются из Git-релиза; tilda_assets остаётся одной копией в /home/scissors/static."
+	@echo "Файлы public/ копируются из Git-релиза; приватные фото импорта сюда не входят."
 
 
 # ============================================================

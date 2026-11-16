@@ -9,7 +9,7 @@ from pathlib import Path
 MANIFEST = Path(__file__).with_name('tilda_service_images.json')
 
 # Background images of the six linked category cards in index__66e40b94.html.
-# The names in tilda_assets are opaque, so keep the verified link → file map.
+# Source filenames are opaque, so keep the verified link → file map for the import command.
 CATEGORY_IMAGES = {
     'hair': 'tild3631-6361-4436-a432-623262326339/Frame_137.png',
     'nails': 'tild3761-3237-4434-a530-623537343833/Frame_1000005494.png',
