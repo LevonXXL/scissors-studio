@@ -258,16 +258,24 @@ WEB_PUSH_VAPID_SUBJECT = os.environ.get('WEB_PUSH_VAPID_SUBJECT', '')
 
 # Confirmation links are sent only when a sender and frontend origin are set.
 FRONTEND_BASE_URL = SITE_URL
-EMAIL_FROM_ADDRESS = os.environ.get('EMAIL_FROM_ADDRESS', 'noreply@scissors.local' if DEBUG else '')
+EMAIL_FROM_ADDRESS = os.environ.get(
+    'EMAIL_FROM_ADDRESS',
+    'noreply@scissors.local' if DEBUG else 'info@scissors.group',
+)
+FEEDBACK_RECIPIENT_EMAIL = os.environ.get('FEEDBACK_RECIPIENT_EMAIL', 'info@scissors.group')
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend',
 )
-EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', os.environ.get('SMTP_HOST', ''))
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', os.environ.get('SMTP_PORT', '587')))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', os.environ.get('SMTP_USER', ''))
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', os.environ.get('SMTP_PASSWORD', ''))
+EMAIL_USE_TLS = os.environ.get(
+    'EMAIL_USE_TLS',
+    os.environ.get('SMTP_USE_STARTTLS', 'True'),
+).lower() in ('true', '1', 'yes')
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '10'))
 
 SPECTACULAR_SETTINGS = {

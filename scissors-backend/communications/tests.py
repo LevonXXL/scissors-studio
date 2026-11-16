@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core import mail
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
@@ -63,6 +64,44 @@ class FeedbackPushTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(observed, [response.data['id']])
         self.assertTrue(FeedbackRequest.objects.filter(pk=response.data['id']).exists())
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        EMAIL_FROM_ADDRESS='info@scissors.group',
+        EMAIL_HOST='smtp.mail.selcloud.ru',
+        FEEDBACK_RECIPIENT_EMAIL='info@scissors.group',
+    )
+    def test_feedback_sends_email_after_commit(self):
+        with patch('communications.views.notify_new_feedback'):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post('/api/v1/feedback/', {
+                    'name': 'Клиент', 'phone': '+79991234567', 'message': 'Перезвоните мне',
+                })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['info@scissors.group'])
+        self.assertIn('Клиент', mail.outbox[0].body)
+        self.assertIn('Перезвоните мне', mail.outbox[0].body)
+
+    @override_settings(
+        EMAIL_FROM_ADDRESS='info@scissors.group',
+        EMAIL_HOST='smtp.mail.selcloud.ru',
+        FEEDBACK_RECIPIENT_EMAIL='info@scissors.group',
+    )
+    def test_feedback_email_failure_does_not_fail_request_or_log_message(self):
+        with patch('communications.views.notify_new_feedback'), \
+                patch('communications.email.send_mail', side_effect=RuntimeError('private SMTP response')):
+            with self.assertLogs('communications.email', level='WARNING') as captured:
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.post('/api/v1/feedback/', {
+                        'name': 'Клиент', 'phone': '+79991234567', 'message': 'Перезвоните мне',
+                    })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(FeedbackRequest.objects.filter(pk=response.data['id']).exists())
+        self.assertIn('RuntimeError', '\n'.join(captured.output))
+        self.assertNotIn('private SMTP response', '\n'.join(captured.output))
 
     def test_feedback_accepts_email_as_contact(self):
         response = self.client.post('/api/v1/feedback/', {

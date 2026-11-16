@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import PushPreference, PushSubscription
+from .email import notify_feedback_email
 from .push import notify_new_feedback, push_configured
 from .serializers import FeedbackRequestSerializer, PushPreferenceSerializer, PushSubscriptionSerializer
 
@@ -22,6 +23,7 @@ class FeedbackRequestView(APIView):
         with transaction.atomic():
             feedback = serializer.save(user=request.user if request.user.is_authenticated else None)
             transaction.on_commit(lambda: notify_new_feedback(feedback))
+            transaction.on_commit(lambda: notify_feedback_email(feedback))
         return Response({'id': feedback.pk}, status=status.HTTP_201_CREATED)
 
 
