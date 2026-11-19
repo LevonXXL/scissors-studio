@@ -9,8 +9,11 @@ from core_utils.ckeditor_upload import staff_image_upload
 from masters.bot_views import max_webhook, telegram_webhook
 from masters.telegram_admin import telegram_webhook_settings
 from analytics.admin import analytics_report
+from core_utils.health import health, ready
 
 urlpatterns = [
+    path('health/', health, name='health'),
+    path('ready/', ready, name='ready'),
     path('analytics/', include('analytics.urls')),
     path('webhooks/staff/telegram/', telegram_webhook, name='staff-telegram-webhook'),
     path('webhooks/staff/max/', max_webhook, name='staff-max-webhook'),

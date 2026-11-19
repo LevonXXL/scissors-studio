@@ -10,7 +10,7 @@ from django.contrib.auth.models import Group, Permission
 from django.core import mail
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APITestCase
 
 from masters.models import Master
@@ -38,6 +38,32 @@ def fake_pywebpush(sender):
     module.WebPushException = FakeWebPushException
     module.webpush = sender
     return patch.dict(sys.modules, {'pywebpush': module})
+
+
+class MonitoringEndpointTests(SimpleTestCase):
+    def test_health_returns_only_a_minimal_success_response(self):
+        response = self.client.get('/health/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ok')
+        self.assertEqual(response['Cache-Control'], 'no-store')
+
+    def test_ready_returns_success_when_django_registry_is_ready(self):
+        response = self.client.get('/ready/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ready')
+        self.assertEqual(response['Cache-Control'], 'no-store')
+
+    def test_ready_returns_unavailable_when_django_registry_is_not_ready(self):
+        from django.apps import apps
+
+        with patch.object(apps, 'ready', False):
+            response = self.client.get('/ready/')
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.content, b'not ready')
+        self.assertNotIn(b'settings', response.content)
 
 
 @override_settings(**PUSH_SETTINGS)

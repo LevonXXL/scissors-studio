@@ -13,6 +13,7 @@
     "build": "quasar build",
     "typecheck": "vue-tsc --noEmit",
     "test:messenger-links": "node --experimental-strip-types --test tests/feedbackMessenger.test.mjs",
+    "test:monitoring": "node --experimental-strip-types --test tests/monitoring.test.mjs",
     "postinstall": "quasar prepare"
   },
   "dependencies": {

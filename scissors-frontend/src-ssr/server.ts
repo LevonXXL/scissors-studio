@@ -11,6 +11,7 @@ import express from "express";
 import { randomBytes } from "node:crypto";
 import type { Application, Request, Response } from "express";
 import type { Server } from "node:http";
+import { registerMonitoringRoutes } from "./monitoring";
 import {
   defineSsrClose,
   defineSsrCreate,
@@ -34,6 +35,8 @@ declare module "#q-app" {
  */
 export const create = defineSsrCreate(async (/* { ... } */) => {
   const app = express();
+  app.locals.monitoringReady = false;
+  registerMonitoringRoutes(app, () => app.locals.monitoringReady === true);
   const siteUrl = import.meta.env.VITE_SITE_URL;
   const apiOrigin = new URL(import.meta.env.VITE_API_BASE_URL).origin;
   const mediaOrigin = new URL(import.meta.env.VITE_MEDIA_URL).origin;
@@ -119,7 +122,9 @@ export const listen = defineSsrListen(
       const server = https.createServer(devHttpsOptions, (req, res) => {
         app(req, res);
       });
-      return server.listen(port);
+      return server.listen(port, '127.0.0.1', () => {
+        app.locals.monitoringReady = true;
+      });
     }
 
     /**
@@ -135,6 +140,7 @@ export const listen = defineSsrListen(
       app(req, res);
     });
     return server.listen(port, '127.0.0.1', () => {
+      app.locals.monitoringReady = true;
       if (import.meta.env.QUASAR_PROD) {
         console.log(`🚀 Server listening at port ${port}`);
       }
