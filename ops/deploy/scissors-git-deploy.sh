@@ -176,4 +176,33 @@ fi
 "$NODE_HOME/bin/npm" cache clean --force >/dev/null 2>&1 || true
 "$RELEASE/scissors-backend/.venv/bin/python" -m pip cache purge >/dev/null 2>&1 || true
 
+rotate_releases() {
+    local active previous="" candidate
+    active="$(readlink -f "$CURRENT")"
+    [[ -d "$active" && "$active" == "$RELEASES/"* ]] || {
+        echo "Skipping release rotation: current does not point into $RELEASES" >&2
+        return 1
+    }
+
+    while IFS= read -r candidate; do
+        if [[ "$candidate" != "$active" && "$candidate" != "$RELEASES/production" ]]; then
+            previous="$candidate"
+            break
+        fi
+    done < <(find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
+
+    while IFS= read -r candidate; do
+        [[ "$candidate" == "$active" || "$candidate" == "$previous" ]] && continue
+        if [[ -e "$candidate/.git" ]]; then
+            git -C "$REPOSITORY" worktree remove --force "$candidate" || return 1
+        else
+            rm -rf -- "$candidate" || return 1
+        fi
+        echo "Removed old release $candidate"
+    done < <(find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -printf '%p\n')
+    git -C "$REPOSITORY" worktree prune
+}
+
+rotate_releases || echo "Release rotation failed; deployment remains active" >&2
+
 echo "Deployed $COMMIT"
