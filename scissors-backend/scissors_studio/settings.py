@@ -45,6 +45,9 @@ API_ORIGIN = os.environ.get('API_ORIGIN', 'http://localhost:8000' if DEBUG else 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', 'localhost,127.0.0.1,scissors.group,studio.scissors.group,scissors-studio.online,api.studio.scissors.group,studio.static.scissors.group,admin.studio.scissors.group', cast=Csv())
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+# Monitoring routes only bind to the local application listeners and are
+# blocked by exact 404 locations in the public Angie vhosts.
+SECURE_REDIRECT_EXEMPT = [r'^(health|ready)/$']
 if os.environ.get('SCISSORS_PRODUCTION') == '1':
     CORS_ALLOW_ALL_ORIGINS = False
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

@@ -41,6 +41,13 @@ def fake_pywebpush(sender):
 
 
 class MonitoringEndpointTests(SimpleTestCase):
+    @override_settings(SECURE_SSL_REDIRECT=True, SECURE_PROXY_SSL_HEADER=None)
+    def test_monitoring_endpoints_answer_over_local_http_with_https_redirect_enabled(self):
+        for path in ('/health/', '/ready/'):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+
     def test_health_returns_only_a_minimal_success_response(self):
         response = self.client.get('/health/')
 
