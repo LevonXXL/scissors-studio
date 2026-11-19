@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia';
 import api from '@/api/client';
 import { fetchSalons } from '@/api/endpoints';
+import { dedupeInFlight } from '@/utils/inFlight';
+
+export interface MenuCategory {
+  link_title: string;
+  url_path: string;
+}
 
 export interface Price {
   level: string;
@@ -74,11 +80,13 @@ function isSelectableSalon(salon: Salon): boolean {
 export const useServiceCatalogStore = defineStore('serviceCatalog', {
   state: () => ({
     rootCategories: [] as Category[],
+    menuCategories: [] as MenuCategory[],
     salons: [] as Salon[],
     salonCatalogues: [] as SalonCatalogue[],
     openGroupsByPage: {} as Record<string, Record<string, boolean>>,
 
     rootLoaded: false,
+    menuLoaded: false,
     salonsLoaded: false,
     cataloguesLoaded: false,
 
@@ -119,18 +127,29 @@ export const useServiceCatalogStore = defineStore('serviceCatalog', {
     async loadRootCategories(): Promise<void> {
       if (this.rootLoaded) return;
 
-      this.loading = true;
+      return dedupeInFlight(this, 'root-categories', async () => {
+        if (this.rootLoaded) return;
+        this.loading = true;
+        try {
+          const { data } = await api.get<ApiList<Category>>('/service-categories/');
+          this.rootCategories = toArray(data);
+          this.rootLoaded = true;
+        } finally {
+          this.loading = false;
+        }
+      });
+    },
 
-      try {
-        const { data } = await api.get<ApiList<Category>>(
-          '/service-categories/',
-        );
+    /** Минимальный набор категорий для меню; API кэширует его отдельно. */
+    async loadMenuCategories(): Promise<void> {
+      if (this.menuLoaded) return;
 
-        this.rootCategories = toArray(data);
-        this.rootLoaded = true;
-      } finally {
-        this.loading = false;
-      }
+      return dedupeInFlight(this, 'menu-categories', async () => {
+        if (this.menuLoaded) return;
+        const { data } = await api.get<MenuCategory[]>('/service-categories/menu/');
+        this.menuCategories = data;
+        this.menuLoaded = true;
+      });
     },
 
     /**
@@ -139,38 +158,29 @@ export const useServiceCatalogStore = defineStore('serviceCatalog', {
     async loadSalonCatalogues(): Promise<void> {
       if (this.cataloguesLoaded) return;
 
-      this.loading = true;
+      return dedupeInFlight(this, 'salon-catalogues', async () => {
+        if (this.cataloguesLoaded) return;
+        this.loading = true;
+        try {
+          if (!this.salonsLoaded) {
+            this.salons = (await fetchSalons()) as Salon[];
+            this.salonsLoaded = true;
+          }
 
-      try {
-        if (!this.salonsLoaded) {
-          this.salons = (await fetchSalons()) as Salon[];
-          this.salonsLoaded = true;
+          const selectableSalons = this.salons.filter(isSelectableSalon);
+          this.salonCatalogues = await Promise.all(
+            selectableSalons.map(async (salon) => {
+              const { data } = await api.get<ApiList<Category>>('/service-categories/', {
+                params: { salon: salon.id },
+              });
+              return { salon, categories: toArray(data) };
+            }),
+          );
+          this.cataloguesLoaded = true;
+        } finally {
+          this.loading = false;
         }
-
-        const selectableSalons = this.salons.filter(isSelectableSalon);
-
-        this.salonCatalogues = await Promise.all(
-          selectableSalons.map(async (salon) => {
-            const { data } = await api.get<ApiList<Category>>(
-              '/service-categories/',
-              {
-                params: {
-                  salon: salon.id,
-                },
-              },
-            );
-
-            return {
-              salon,
-              categories: toArray(data),
-            };
-          }),
-        );
-
-        this.cataloguesLoaded = true;
-      } finally {
-        this.loading = false;
-      }
+      });
     },
   },
 });

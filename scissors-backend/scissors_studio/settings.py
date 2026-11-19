@@ -121,6 +121,44 @@ CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/
 # но сам Django (сайт, админка, API) работает нормально.
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = 'Europe/Moscow'
+
+# Public API representations use a dedicated Redis DB and namespace. Local
+# development remains self-contained; production falls through to PostgreSQL
+# queries if Redis is temporarily unavailable.
+if os.environ.get('SCISSORS_PRODUCTION') == '1':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'scissors-default-unused',
+            'TIMEOUT': 300,
+        },
+        'public_content': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.environ.get(
+                'SCISSORS_PUBLIC_CACHE_URL', 'redis://127.0.0.1:6379/2',
+            ),
+            'KEY_PREFIX': 'scissors-public-prod',
+            'TIMEOUT': 900,
+            'OPTIONS': {
+                'socket_connect_timeout': 0.2,
+                'socket_timeout': 0.5,
+            },
+        },
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'scissors-default-local',
+            'TIMEOUT': 900,
+        },
+        'public_content': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'scissors-public-content',
+            'TIMEOUT': 900,
+        },
+    }
+
 CELERY_BEAT_SCHEDULE = {
     'send-booking-reminders': {
         'task': 'booking.tasks.send_booking_reminders',

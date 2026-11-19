@@ -9,6 +9,7 @@ User=scissors-frontend
 Group=scissors-frontend
 WorkingDirectory=/home/scissors/current/scissors-frontend/dist/ssr
 Environment=NODE_ENV=production
+Environment=SSR_API_BASE_URL=http://127.0.0.1:8553/api/v1
 ExecStart=/home/scissors/runtime/node-v22.23.5-linux-x64/bin/node /home/scissors/current/scissors-frontend/dist/ssr/index.js
 Restart=always
 RestartSec=10

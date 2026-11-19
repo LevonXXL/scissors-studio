@@ -25,19 +25,13 @@ export async function fetchSearch(query: string, page = 1, pageSize = 30): Promi
 }
 
 export interface CatalogueCategorySummary {
-  id: number;
-  title: string;
   link_title: string;
-  code: string;
-  image_url: string;
-  image_path: string;
   url_path: string;
-  meta_description: string;
 }
 
 export async function fetchCatalogueCategories(): Promise<CatalogueCategorySummary[]> {
-  const { data } = await api.get<PaginatedResponse<CatalogueCategorySummary> | CatalogueCategorySummary[]>('/service-categories/');
-  return Array.isArray(data) ? data : data.results;
+  const { data } = await api.get<CatalogueCategorySummary[]>('/service-categories/menu/');
+  return data;
 }
 import type { HomeReview, Master, PageDetail, PageListItem, PaginatedResponse, Review, ReviewSource, Salon } from '@/api/types';
 

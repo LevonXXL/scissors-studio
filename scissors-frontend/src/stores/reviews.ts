@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { fetchReviews, type FetchReviewsParams } from '@/api/endpoints';
 import type { Review } from '@/api/types';
+import { dedupeInFlight } from '@/utils/inFlight';
 
 export function reviewFilterKey(params: FetchReviewsParams): string {
   return `${params.salon ?? ''}|${params.source ?? ''}|${params.withImages ? 1 : 0}|${params.limit ?? ''}`;
@@ -18,16 +19,19 @@ export const useReviewsStore = defineStore('reviews', {
       const key = reviewFilterKey(params);
       if (this.loaded[key]) return;
 
-      this.loading[key] = true;
-      try {
-        this.byFilter[key] = await fetchReviews(params);
-      } catch (error) {
-        console.error('Не удалось загрузить отзывы:', error);
-        this.byFilter[key] = [];
-      } finally {
-        this.loaded[key] = true;
-        this.loading[key] = false;
-      }
+      return dedupeInFlight(this, `reviews:${key}`, async () => {
+        if (this.loaded[key]) return;
+        this.loading[key] = true;
+        try {
+          this.byFilter[key] = await fetchReviews(params);
+        } catch (error) {
+          console.error('Не удалось загрузить отзывы:', error);
+          this.byFilter[key] = [];
+        } finally {
+          this.loaded[key] = true;
+          this.loading[key] = false;
+        }
+      });
     },
   },
 });

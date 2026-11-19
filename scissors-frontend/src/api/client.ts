@@ -2,14 +2,27 @@ import axios from 'axios';
 import { API_BASE_URL } from '@/config/urls';
 
 const BASE_URL = API_BASE_URL;
+const SSR_BASE_URL = typeof window === 'undefined'
+  ? process.env.SSR_API_BASE_URL
+  : undefined;
 
 if (!BASE_URL) {
   console.warn('[API] VITE_API_BASE_URL не задан');
 }
 
+const publicApiUrl = BASE_URL ? new URL(BASE_URL) : null;
 const api = axios.create({
-  baseURL: BASE_URL || '',
-  headers: { 'Content-Type': 'application/json' },
+  baseURL: SSR_BASE_URL || BASE_URL || '',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(SSR_BASE_URL && publicApiUrl
+      ? {
+          // Keep API-generated absolute media links public while connecting over loopback.
+          Host: publicApiUrl.host,
+          'X-Forwarded-Proto': publicApiUrl.protocol.replace(':', ''),
+        }
+      : {}),
+  },
 });
 
 export class ApiError extends Error {

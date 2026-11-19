@@ -12,6 +12,7 @@
     "dev": "quasar dev",
     "build": "quasar build",
     "typecheck": "vue-tsc --noEmit",
+    "test:ssr-prefetch": "node --experimental-strip-types --test tests/inFlight.test.mjs",
     "test:messenger-links": "node --experimental-strip-types --test tests/feedbackMessenger.test.mjs",
     "test:monitoring": "node --experimental-strip-types --test tests/monitoring.test.mjs",
     "postinstall": "quasar prepare"

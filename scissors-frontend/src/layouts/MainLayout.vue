@@ -215,7 +215,7 @@ export default {
   preFetch: definePreFetch(async ({ store, currentRoute }) => {
     const path = currentRoute.path.replace(/^\/+|\/+$/g, '');
     await Promise.all([
-      useServiceCatalogStore(store).loadRootCategories(),
+      useServiceCatalogStore(store).loadMenuCategories(),
       ...(staticPagePaths.has(path) ? [usePagesStore(store).load(path)] : []),
     ]);
   }),
@@ -310,9 +310,9 @@ function submitHeaderSearch() {
 const serviceCatalog = useServiceCatalogStore();
 
 const servicesMenu = computed(() =>
-  serviceCatalog.rootCategories.map((item) => ({
+  serviceCatalog.menuCategories.map((item) => ({
     href: `/${item.url_path}`,
-    label: item.link_title || item.title,
+    label: item.link_title,
   })),
 );
 

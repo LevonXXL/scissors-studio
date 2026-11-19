@@ -1,4 +1,14 @@
+from django.db.models import Case, CharField, Exists, F, OuterRef, Q, When
 from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from core_utils.public_cache import (
+    cached_public_response,
+    is_authenticated_request,
+    remember_public_data,
+)
+from salons.models import Salon
 
 from .models import Service, ServiceCategory, ServiceSalon
 
@@ -108,6 +118,78 @@ class ServiceCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ServiceCategory.objects.filter(is_active=True).select_related('image', 'page').prefetch_related(
         'page__pictures__image').order_by('weight', 'id')
     serializer_class = ServiceCategorySerializer
+
+    def _cacheable_list_request(self, request):
+        if is_authenticated_request(request):
+            return False
+        if request.query_params.get('page', '1') != '1':
+            return False
+        salon_id = request.query_params.get('salon')
+        if not salon_id:
+            return True
+        if not salon_id.isdigit():
+            return False
+        selectable_salon_ids = remember_public_data(
+            'service-catalog-salons',
+            'selectable-ids',
+            lambda: list(Salon.objects.filter(is_active=True).filter(
+                Q(slug__contains='zelenograd') | Q(slug__contains='krasnye-vorota')
+            ).values_list('id', flat=True)),
+            timeout=6 * 60 * 60,
+        )
+        return int(salon_id) in selectable_salon_ids
+
+    def list(self, request, *args, **kwargs):
+        if not self._cacheable_list_request(request):
+            return super().list(request, *args, **kwargs)
+        params = '&'.join(
+            f'{name}={request.query_params.get(name, "")}'
+            for name in ('salon', 'page')
+        )
+        key = f'{request.scheme}://{request.get_host()}/service-categories/?{params}'
+        return cached_public_response(
+            'service-catalog', key, request,
+            lambda: super(ServiceCategoryViewSet, self).list(request, *args, **kwargs),
+            timeout=6 * 60 * 60,
+        )
+
+    @action(detail=False, methods=['get'], url_path='menu')
+    def menu(self, request):
+        key = f'{request.scheme}://{request.get_host()}/service-categories/menu/'
+
+        def load_menu():
+            return list(
+                ServiceCategory.objects.filter(
+                    is_active=True,
+                    page__isnull=False,
+                    page__is_published=True,
+                    page__url_path__gt='',
+                )
+                .filter(Exists(Service.objects.filter(
+                    category_id=OuterRef('pk'),
+                    is_active=True,
+                    salon_offers__is_active=True,
+                    salon_offers__salon__is_active=True,
+                )))
+                .annotate(
+                    link_title=Case(
+                        When(page__link_title__gt='', then=F('page__link_title')),
+                        When(page__title__gt='', then=F('page__title')),
+                        default=F('title'),
+                        output_field=CharField(),
+                    ),
+                    url_path=F('page__url_path'),
+                )
+                .values('link_title', 'url_path')
+                .order_by('weight', 'id')
+            )
+
+        if is_authenticated_request(request):
+            return Response(load_menu())
+        data = remember_public_data(
+            'service-menu', key, load_menu, timeout=24 * 60 * 60,
+        )
+        return Response(data)
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(services__salon_offers__is_active=True,

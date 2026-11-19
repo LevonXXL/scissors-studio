@@ -1,14 +1,54 @@
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 
+from core_utils.public_cache import cached_public_response
 from .models import Review
 from .serializers import ReviewSerializer, HomeReviewSerializer
+
+
+def _review_cache_key(request, allowed_params):
+    """Keep cache cardinality bounded to supported first-page public filters."""
+    if request.query_params.get('page', '1') != '1':
+        return None
+    # Salon pages have few requests and many possible IDs; leave them uncached.
+    if request.query_params.get('salon'):
+        return None
+
+    params = []
+    for name in allowed_params:
+        values = request.query_params.getlist(name)
+        if len(values) > 1:
+            return None
+        value = values[0] if values else ''
+        if value and not value.isdigit():
+            return None
+        if name == 'limit' and value and not 1 <= int(value) <= 50:
+            return None
+        if name == 'source' and value and int(value) not in {1, 2, 3, 4, 5, 99}:
+            return None
+        if name == 'rating' and value and int(value) not in {1, 2, 3, 4, 5}:
+            return None
+        if name == 'with_images' and value and value != '1':
+            return None
+        if value:
+            params.append(f'{name}={value}')
+    return f'{request.scheme}://{request.get_host()}{request.path}?{"&".join(params)}'
 
 
 class ReviewViewSet(viewsets.ReadOnlyModelViewSet):
     """Все отзывы, с фильтром по салону, площадке (source) и рейтингу."""
     queryset = Review.objects.filter(is_published=True).select_related('salon')
     serializer_class = ReviewSerializer
+
+    def list(self, request, *args, **kwargs):
+        key = _review_cache_key(request, ('salon', 'source', 'rating', 'with_images'))
+        if key is None:
+            return super().list(request, *args, **kwargs)
+        return cached_public_response(
+            'reviews', key, request,
+            lambda: super(ReviewViewSet, self).list(request, *args, **kwargs),
+            timeout=15 * 60,
+        )
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -35,6 +75,16 @@ class HomeReviewViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
     serializer_class = HomeReviewSerializer
     pagination_class = None  # Все за раз — для карусели на главной
+
+    def list(self, request, *args, **kwargs):
+        key = _review_cache_key(request, ('limit',))
+        if key is None:
+            return super().list(request, *args, **kwargs)
+        return cached_public_response(
+            'reviews', key, request,
+            lambda: super(HomeReviewViewSet, self).list(request, *args, **kwargs),
+            timeout=15 * 60,
+        )
 
     def get_queryset(self):
         qs = (

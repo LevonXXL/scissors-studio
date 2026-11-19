@@ -408,4 +408,8 @@ def apply_unified_preview(preview, matches, selected_rows):
             changed += sync_offer_prices(offer, city_prices)
     from .catalog_pages import ensure_catalog_pages
     ensure_catalog_pages(categories.values(), touched)
+    if changed:
+        from core_utils.public_cache import invalidate_public_data
+
+        transaction.on_commit(lambda: invalidate_public_data('service-catalog'))
     return changed
