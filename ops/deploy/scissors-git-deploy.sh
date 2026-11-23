@@ -79,7 +79,12 @@ if [[ -z "$VITE_YANDEX_MAPS_API_KEY" ]]; then
     echo "Refusing deploy: VITE_YANDEX_MAPS_API_KEY is missing from frontend build config" >&2
     exit 1
 fi
-export VITE_YANDEX_MAPS_API_KEY
+VITE_YANDEX_METRIKA_ID="$(awk -F= '$1 == "VITE_YANDEX_METRIKA_ID" { sub(/^[^=]*=/, ""); print; exit }' "$FRONTEND_BUILD_ENV")"
+if [[ ! "$VITE_YANDEX_METRIKA_ID" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Refusing deploy: VITE_YANDEX_METRIKA_ID is missing or invalid in frontend build config" >&2
+    exit 1
+fi
+export VITE_YANDEX_MAPS_API_KEY VITE_YANDEX_METRIKA_ID
 if [[ -e "$PUBLIC_IMPORT_PHOTOS" ]]; then
     echo "Refusing deploy: service photo archive must not be in public static: $PUBLIC_IMPORT_PHOTOS" >&2
     exit 1
@@ -109,6 +114,7 @@ VITE_SITE_URL=https://studio.scissors.group \
 VITE_API_BASE_URL=https://api.studio.scissors.group/api/v1 \
 VITE_STATIC_URL=https://studio.static.scissors.group/static/ \
 VITE_MEDIA_URL=https://studio.static.scissors.group/media/ \
+VITE_YANDEX_METRIKA_ID="$VITE_YANDEX_METRIKA_ID" \
 "$NODE_HOME/bin/npm" run build -- -m ssr || BUILD_STATUS=$?
 if [[ "${BUILD_STATUS:-0}" -ne 0 ]]; then
     exit "$BUILD_STATUS"
