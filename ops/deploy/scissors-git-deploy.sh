@@ -79,7 +79,10 @@ if [[ -z "$VITE_YANDEX_MAPS_API_KEY" ]]; then
     echo "Refusing deploy: VITE_YANDEX_MAPS_API_KEY is missing from frontend build config" >&2
     exit 1
 fi
+# Counter IDs are public frontend config. Keep the production value as a
+# fallback so a missing optional build-env entry cannot silently disable analytics.
 VITE_YANDEX_METRIKA_ID="$(awk -F= '$1 == "VITE_YANDEX_METRIKA_ID" { sub(/^[^=]*=/, ""); print; exit }' "$FRONTEND_BUILD_ENV")"
+VITE_YANDEX_METRIKA_ID="${VITE_YANDEX_METRIKA_ID:-64608694}"
 if [[ ! "$VITE_YANDEX_METRIKA_ID" =~ ^[1-9][0-9]*$ ]]; then
     echo "Refusing deploy: VITE_YANDEX_METRIKA_ID is missing or invalid in frontend build config" >&2
     exit 1
